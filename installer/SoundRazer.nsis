@@ -11,9 +11,21 @@
 ; script: embeddable Python 3.11.9 (python.org) with pip bootstrapped via
 ; get-pip.py and `pip install pywebview` run against it. Rebuild it with:
 ;   curl -o embedded\python-embed.zip https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip
-;   (extract to embedded\runtime\, uncomment "import site" in python311._pth,
-;    add "Lib\site-packages" to it, then: runtime\python.exe get-pip.py &&
-;    runtime\python.exe -m pip install pywebview)
+;   (extract to embedded\runtime\, then edit python311._pth to read:
+;      python311.zip
+;      .
+;      Lib\site-packages
+;      ..
+;
+;      import site
+;    — the blank "..":  sound_razor/ and ui_entrypoint.py are installed as
+;    runtime\'s SIBLINGS ($INSTDIR, not $INSTDIR\runtime), and embeddable
+;    Python otherwise only searches its own folder + site-packages, so
+;    `import sound_razor` fails with ModuleNotFoundError without it —
+;    this broke every installed copy until caught by actually running the
+;    real installed exe, not just testing against a dev venv that already
+;    had the package pip-installed.
+;    Then: runtime\python.exe get-pip.py && runtime\python.exe -m pip install pywebview)
 ; No nsisunz or other plugin is needed — File /r just copies the folder as-is.
 ;
 ; Installs to Program Files for all users, so it needs administrator rights
