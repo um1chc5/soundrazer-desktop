@@ -1,0 +1,37 @@
+# Python virtual environment (recreated via: uv venv .venv && uv pip install -e ".[full]")
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Local runtime state — downloaded AI models, last-used folder, session config
+.sound-razor/
+
+# User song libraries / separated output — personal and often copyrighted audio,
+# never belongs in the repo. The default output folder and any other projects folder.
+output/
+*.wav
+*.mp3
+*.flac
+*.m4a
+*.aac
+*.ogg
+*.opus
+*.aiff
+*.aif
+
+# Build artifacts
+dist/
+build/
+*.exe
+*.msi
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code project state (local to this machine)
+.claude/
