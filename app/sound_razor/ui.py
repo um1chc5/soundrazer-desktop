@@ -637,10 +637,17 @@ def make_server(library: Library, port: int = 8765):
     return server
 
 
-def serve(projects: Path | None, port: int, cache: Path, window=None):
+def serve(projects: Path | None, port: int, cache: Path, window=None, config: Path | None = None,
+          default_root: Path | None = None):
     if not ensure_ffmpeg_on_path():
         print(MISSING_FFMPEG, file=sys.stderr, flush=True)
-    library = Library(projects, Path(".sound-razor/ui.json"), cache, Path("output"), window=window)
+    # Callers running from an installed, read-only location (Program Files) must pass
+    # config/default_root pointing somewhere actually writable — see ui_entrypoint.py.
+    # These relative-path fallbacks only make sense for the `sound-razor ui` CLI, run
+    # from a writable working directory.
+    config = config if config is not None else Path(".sound-razor/ui.json")
+    default_root = default_root if default_root is not None else Path("output")
+    library = Library(projects, config, cache, default_root, window=window)
     server = make_server(library, port)
     print(f"Sound Razor UI: http://127.0.0.1:{server.server_port}", flush=True)
     print("Open that address in your browser. Stop the server with Ctrl+C.", flush=True)

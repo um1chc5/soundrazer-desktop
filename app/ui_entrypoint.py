@@ -18,6 +18,26 @@ from sound_razor import ui
 
 MIN_WIDTH, MIN_HEIGHT = 1100, 700
 
+
+def writable_dirs():
+    """Where this app keeps its own data when it may be installed somewhere read-only
+    (Program Files needs admin rights to write to — a plain double-click shortcut never
+    has them, so writing config/models/output there crashes the app before its window
+    even opens, silently, since pythonw.exe shows no console for the traceback).
+
+    Background data (config, the multi-hundred-MB model cache) goes under the standard
+    per-user app-data folder; the default separated-song output folder goes somewhere
+    the user would actually look for it.
+    """
+    local_app_data = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    app_data_dir = local_app_data / "SoundRazer Desktop"
+    documents = Path(os.environ.get("USERPROFILE") or Path.home()) / "Documents"
+    return {
+        "config": app_data_dir / "ui.json",
+        "cache": app_data_dir / "models",
+        "default_root": documents / "SoundRazer Desktop",
+    }
+
 # Which corner/edge stays put while the opposite one follows the mouse, keyed by the
 # resize handle's compass direction (see resize_to below).
 FIX_POINTS = None if FixPoint is None else {
@@ -99,8 +119,10 @@ def main():
     # further down) is visible and attach() below has already run.
     controls = WindowControls() if webview is not None else None
 
+    dirs = writable_dirs()
+
     def run_server():
-        serve(None, port, Path(".sound-razor/models"), window=controls)
+        serve(None, port, dirs["cache"], window=controls, config=dirs["config"], default_root=dirs["default_root"])
 
     server_thread = threading.Thread(target=run_server, daemon=True)
     server_thread.start()
