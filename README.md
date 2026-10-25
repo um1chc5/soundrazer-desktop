@@ -1,5 +1,7 @@
 # SoundRazer Desktop
 
+[![Download for Windows](https://img.shields.io/github/v/release/um1chc5/soundrazer-desktop?label=Download%20for%20Windows&style=for-the-badge&color=ff8a3d)](https://github.com/um1chc5/soundrazer-desktop/releases/latest/download/SoundRazer-Setup-x64.exe)
+
 A standalone desktop application for AI-powered audio stem separation, built on the excellent [Sound Razor](https://github.com/pedromtcosta/sound-razor) by [pedromtcosta](https://github.com/pedromtcosta).
 
 ## About
@@ -26,7 +28,7 @@ This project is built upon [Sound Razor](https://github.com/pedromtcosta/sound-r
 
 ### For Users (Recommended)
 
-Download `SoundRazer-Setup-x64.exe` from releases and run it. The installer is tiny and works offline:
+**[Download SoundRazer-Setup-x64.exe](https://github.com/um1chc5/soundrazer-desktop/releases/latest/download/SoundRazer-Setup-x64.exe)** (latest release) and run it. The installer is tiny and works offline:
 
 - Copies the app and an embedded Python runtime to a folder you choose (default: `%LocalAppData%\SoundRazer Desktop`; no administrator elevation needed)
 - Creates Start Menu and Desktop shortcuts and registers an uninstaller
