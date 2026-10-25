@@ -30,8 +30,8 @@ This project is built upon [Sound Razor](https://github.com/pedromtcosta/sound-r
 
 **[Download SoundRazer-Setup-x64.exe](https://github.com/um1chc5/soundrazer-desktop/releases/latest/download/SoundRazer-Setup-x64.exe)** (latest release) and run it. The installer is tiny and works offline:
 
-- Copies the app and an embedded Python runtime to a folder you choose (default: `%LocalAppData%\SoundRazer Desktop`; no administrator elevation needed)
-- Creates Start Menu and Desktop shortcuts and registers an uninstaller
+- Installs to Program Files (default: `C:\Program Files\SoundRazer Desktop`) — requires administrator rights, so Windows will prompt for them
+- Creates a Start Menu entry and registers an uninstaller; you choose whether to also add a desktop icon
 
 On first launch the app window opens immediately and shows a one-time setup screen. You explicitly consent to download and install the remaining pieces — FFmpeg and the PyTorch/audio-separation stack (~1.6 GB total) — before anything downloads. Library and Separate stay visible but inactive until setup is approved. AI models (~500 MB) are then downloaded on first separation, as before.
 

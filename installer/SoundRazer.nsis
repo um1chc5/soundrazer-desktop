@@ -1,4 +1,4 @@
-; SoundRazer Desktop — NSIS installer (user-level, no wizard)
+; SoundRazer Desktop — NSIS installer
 ;
 ; Build: makensis SoundRazer.nsis
 ;
@@ -15,6 +15,11 @@
 ;    add "Lib\site-packages" to it, then: runtime\python.exe get-pip.py &&
 ;    runtime\python.exe -m pip install pywebview)
 ; No nsisunz or other plugin is needed — File /r just copies the folder as-is.
+;
+; Installs to Program Files for all users, so it needs administrator rights
+; (the UAC prompt on launch) — a deliberate change from the earlier per-user,
+; no-elevation design. The desktop shortcut is a user choice on its own page;
+; the Start Menu entry and uninstaller are always created.
 
 !include "MUI2.nsh"
 
@@ -22,68 +27,86 @@
 !define VERSION "1.0.0"
 !define PACKAGE_NAME "SoundRazer-Setup-x64"
 !define REG_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${NAME}"
+!define ICON "..\assets\icon.ico"
+
+!define MUI_ICON "${ICON}"
+!define MUI_UNICON "${ICON}"
 
 Name "${NAME} ${VERSION}"
 OutFile "..\dist\${PACKAGE_NAME}.exe"
-InstallDir "$LOCALAPPDATA\SoundRazer Desktop"
-RequestExecutionLevel user
+InstallDir "$PROGRAMFILES64\SoundRazer Desktop"
+RequestExecutionLevel admin
 ShowInstDetails show
 CRCCheck on
 
-; One page only: pick the destination folder (default %LOCALAPPA data%\SoundRazer Desktop),
-; then installation runs immediately. No license, components, ready or finish checkboxes.
 !insertmacro MUI_PAGE_DIRECTORY
+!insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
 
 !insertmacro MUI_UNPAGE_INSTFILES
 
-!insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
-!insertmacro MUI_DESCRIPTION_TEXT ${MUI_PAGE_DIRECTORY} "Choose where SoundRazer Desktop is installed. Anything user-writable works; no administrator elevation is required."
-!insertmacro MUI_DESCRIPTION_TEXT ${MUI_PAGE_INSTFILES} "Copying app files and embedded runtime. Nothing downloads from the network during install."
-!insertmacro MUI_FUNCTION_DESCRIPTION_END
-
 !insertmacro MUI_LANGUAGE "English"
 
-Section "Install"
+Section "SoundRazer Desktop" SecMain
+  SectionIn RO
+  SetRegView 64
   SetOutPath "$INSTDIR"
   File /r "..\app\*"
   File "..\pyproject.toml"
   File "..\README.md"
   File "..\LICENSE"
+  File "${ICON}"
 
   ; Embedded Python runtime with pywebview pre-installed (see header comment).
   SetOutPath "$INSTDIR\runtime"
   File /r "embedded\runtime\*"
   SetOutPath "$INSTDIR"
 
-  ; Shortcuts: embedded pythonw.exe runs the app window, no console.
+  ; Start Menu entry: embedded pythonw.exe runs the app window, no console.
   ; File /r "..\app\*" copies app/'s CONTENTS into $INSTDIR directly (not into an
   ; "$INSTDIR\app" subfolder), so ui_entrypoint.py lands at $INSTDIR's root.
-  CreateShortCut "$SMPROGRAMS\${NAME}.lnk" "$INSTDIR\runtime\pythonw.exe" "$INSTDIR\ui_entrypoint.py" "$INSTDIR\runtime\python.exe" 0
-  CreateShortCut "$DESKTOP\${NAME}.lnk" "$INSTDIR\runtime\pythonw.exe" "$INSTDIR\ui_entrypoint.py" "$INSTDIR\runtime\python.exe" 0
+  CreateDirectory "$SMPROGRAMS\${NAME}"
+  CreateShortCut "$SMPROGRAMS\${NAME}\${NAME}.lnk" "$INSTDIR\runtime\pythonw.exe" "$INSTDIR\ui_entrypoint.py" "$INSTDIR\icon.ico"
+  CreateShortCut "$SMPROGRAMS\${NAME}\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 
-  ; Add/Remove Programs entry (HKCU — writable without elevation).
-  WriteRegStr HKCU "${REG_KEY}" "DisplayName" "${NAME} ${VERSION}"
-  WriteRegStr HKCU "${REG_KEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
-  WriteRegStr HKCU "${REG_KEY}" "DisplayIcon" "$INSTDIR\runtime\python.exe"
-  WriteRegStr HKCU "${REG_KEY}" "Publisher" "SoundRazer Team"
-  WriteRegStr HKCU "${REG_KEY}" "InstallLocation" "$INSTDIR"
-  WriteRegDWORD HKCU "${REG_KEY}" "VersionMajor" 1
-  WriteRegDWORD HKCU "${REG_KEY}" "VersionMinor" 0
+  ; Add/Remove Programs entry (HKLM — this is now a machine-wide Program Files install).
+  WriteRegStr HKLM "${REG_KEY}" "DisplayName" "${NAME} ${VERSION}"
+  WriteRegStr HKLM "${REG_KEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
+  WriteRegStr HKLM "${REG_KEY}" "DisplayIcon" "$INSTDIR\icon.ico"
+  WriteRegStr HKLM "${REG_KEY}" "Publisher" "SoundRazer Team"
+  WriteRegStr HKLM "${REG_KEY}" "InstallLocation" "$INSTDIR"
+  WriteRegDWORD HKLM "${REG_KEY}" "VersionMajor" 1
+  WriteRegDWORD HKLM "${REG_KEY}" "VersionMinor" 0
+  WriteRegDWORD HKLM "${REG_KEY}" "NoModify" 1
+  WriteRegDWORD HKLM "${REG_KEY}" "NoRepair" 1
 SectionEnd
 
+Section "Desktop shortcut" SecDesktop
+  CreateShortCut "$DESKTOP\${NAME}.lnk" "$INSTDIR\runtime\pythonw.exe" "$INSTDIR\ui_entrypoint.py" "$INSTDIR\icon.ico"
+SectionEnd
+
+!insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
+!insertmacro MUI_DESCRIPTION_TEXT ${SecMain} "The app itself, its embedded Python runtime, a Start Menu entry and an uninstaller. Always installed."
+!insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "Add a SoundRazer Desktop icon to your desktop."
+!insertmacro MUI_FUNCTION_DESCRIPTION_END
+
 Section "Uninstall"
+  SetRegView 64
   Delete "$INSTDIR\Uninstall.exe"
   Delete "$INSTDIR\pyproject.toml"
   Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\LICENSE"
+  Delete "$INSTDIR\icon.ico"
   Delete "$INSTDIR\ui_entrypoint.py"
   RMDir /r "$INSTDIR\sound_razor"
   RMDir /r "$INSTDIR\soundrazer_desktop.egg-info"
   RMDir /r "$INSTDIR\runtime"
-  Delete "$SMPROGRAMS\${NAME}.lnk"
+  RMDir "$INSTDIR"
+  Delete "$SMPROGRAMS\${NAME}\${NAME}.lnk"
+  Delete "$SMPROGRAMS\${NAME}\Uninstall.lnk"
+  RMDir "$SMPROGRAMS\${NAME}"
   Delete "$DESKTOP\${NAME}.lnk"
-  DeleteRegKey HKCU "${REG_KEY}"
+  DeleteRegKey HKLM "${REG_KEY}"
 SectionEnd
