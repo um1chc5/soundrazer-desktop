@@ -143,16 +143,15 @@
       </div>
 
       <section class="card setup-card">
-        <div id="setup-list" class="setup-list"></div>
-        <p id="setup-total" class="setup-total"></p>
+        <div id="setup-list" class="setup-list" aria-live="polite"></div>
+        <p id="setup-total" class="setup-total" aria-live="polite"></p>
         <div class="setup-actions">
           <button id="setup-decline" type="button" class="btn btn-ghost">Not now</button>
+          <button id="setup-cancel" type="button" class="btn btn-ghost" hidden>Cancel</button>
           <button id="setup-start" type="button" class="btn btn-primary btn-xl">Download &amp; install</button>
         </div>
         <p id="setup-error" class="form-error" role="alert"></p>
       </section>
-
-      <div id="setup-panel" class="progress-view compact" hidden></div>
     </section>
 
     <!-- ============ Library ============ -->
