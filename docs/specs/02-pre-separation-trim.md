@@ -2,7 +2,7 @@
 
 Status: Done
 
-What this covers: non-destructive section selection before overall separation and guitar lead/rhythm splitting, with offset playback against the full original.
+What this covers: non-destructive section selection before overall separation and guitar lead/rhythm splitting, with section-only playback.
 
 **Related:** [03 — Output formats](03-output-formats.md), [App specification](01-app.md), [Architecture](../architecture.md)
 
@@ -27,8 +27,8 @@ Add a **non-destructive trim** that limits what the model sees:
 - The project keeps the **full original recording** on disk.
 - The selected range is processed; the resulting stems contain only that range.
 - The trim is stored in `separation.json`.
-- Playback offsets the trimmed stems so they stay aligned with the full
-  original for A/B listening.
+- Playback presents only the selected section; the original and trimmed stems
+  start together at the section start for A/B listening.
 - Re-separation always reads the full original; the last trim is pre-filled but
   can be cleared.
 
@@ -232,51 +232,34 @@ Request bodies:
 `trim` is optional; `null` or absent means the full file. The split-guitar trim
 is **relative to `guitar.wav`**, as in §5.4.
 
-## 6. Playback alignment
+## 6. Section-only playback
 
 ### 6.1 `web/js/audio.js`
 
-Tracks gain an `offset` (seconds on the project timeline, default 0).
-
-- `setTracks()`:
-  `this.duration = Math.max(0, ...tracks.map(t => (t.offset || 0) + t.buffer.duration))`
-- `play()` scheduling:
-
-```js
-for (const track of this.tracks) {
-  const offset = track.offset || 0;
-  const local = this.offset - offset;
-  if (local >= track.buffer.duration) continue;
-  const when = startTime + Math.max(0, -local);
-  const bufferOffset = Math.max(0, local);
-  // ...
-  source.start(when, bufferOffset);
-}
-```
-
-- `onended` detection must compare `offset + buffer.duration` with
-  `this.duration`, not `buffer.duration` alone.
-- `position()`, `seek()`, and `pause()` are unchanged: the transport always
-  shows project time, 0 → full original length.
-- The slow-playback worklet path uses the same `when`/`bufferOffset` values.
-  Delayed sources simply feed silence into the worklet before they start; the
-  position mapping is unchanged.
+- `describe_project()` offsets remain absolute project time.
+- When `separation.trim` is valid and the original is loaded, the player converts
+  the project to section time: `sectionStart` / `sectionEnd` come from the trim,
+  and the transport duration is `sectionEnd - sectionStart`.
+- The original track gets `offset = 0` and `bufferOffset = sectionStart`; each
+  stem gets `offset = max(0, stem.offset - sectionStart)` and
+  `bufferOffset = 0`. `track.projectOffset` keeps the absolute offset for UI
+  labels and exports.
+- `setTracks(tracks, duration)` uses the explicit section duration. Scheduling
+  starts each source at its `bufferOffset`, caps it at the section boundary, and
+  `onended` compares the track’s effective end with the section end.
+- `renderTracks()` draws the original waveform from `bufferOffset` for the
+  section length, so the original preview matches what is heard.
+- `restart` and `seek` are section-relative: 0 is the start of the selected
+  range, not the start of the original file.
 
 ### 6.2 `web/js/views/song.js` and shared app state
 
-- `buildLoadItems()` already spreads the stem dict, so `offset` reaches
-  `player.setTracks()`. The original item gets `offset: 0`.
-- After `setTracks()`, if the first stem offset is > 0, seek there once so the
-  user lands on the section rather than on silence.
-- The “stems have different durations” warning currently compares raw buffer
-  durations and will fire for any trimmed project (the original is longer).
-  Change it to compare `offset + duration` across stems only (exclude the
-  original). If they still differ, keep the warning.
-- Replace the warning, when trimmed, with a status line:
-  `Playing section 1:30.0 – 2:00.0 (30.0 s)`.
-- No change is needed in `renderSong()`’s `audioSignature`: it already
-  stringifies `project.stems`, which will now include each stem’s `offset`, so
-  a different trim triggers a reload.
+- `buildLoadItems()` still carries absolute offsets; `audio.js` normalizes them
+  and preserves `projectOffset` for the trim editor, split dialog, and export
+  note.
+- The status line reads `Playing section 0:00 – 2:07.6 (127.6 s)`.
+- `audioSignature` still includes absolute stem offsets, so changing trim
+  reloads audio.
 
 ## 7. Trim UI
 

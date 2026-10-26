@@ -98,8 +98,9 @@ function openExportDialog(success = false) {
   $('export-formats').onchange = syncExportSubmit;
   $('export-stems').onchange = syncExportSubmit;
   const stems = player.tracks.filter(track => track.file !== ORIGINAL_FILE);
-  const start = stems.length ? Math.min(...stems.map(track => track.offset || 0)) : 0;
-  const end = stems.length ? Math.max(...stems.map(track => (track.offset || 0) + track.buffer.duration)) : 0;
+  const start = stems.length ? Math.min(...stems.map(track => track.projectOffset ?? track.offset ?? 0)) : 0;
+  const end = stems.length ? Math.max(...stems.map(track =>
+    (track.projectOffset ?? track.offset ?? 0) + track.buffer.duration)) : 0;
   const trim = project.separation?.trim;
   const trimmed = trim && Number(trim.end) > Number(trim.start);
   const sectioned = stems.length > 0 && (start > 0 || trimmed);

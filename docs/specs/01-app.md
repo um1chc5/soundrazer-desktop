@@ -70,7 +70,7 @@ FFmpeg is used for normalization, section trimming, export conversion, and media
 | Library | Browse, search, and manage local projects. |
 | Song | View/edit metadata, inspect stems, open the project folder, delete, and play/mix stems. |
 | Setup | Show required and optional setup components and their stage progress; gate actions until required setup is complete. See [04 — First-run setup](04-first-run-setup.md). |
-| Player | Web Audio playback of original and stems, with SoundTouch worklet support for tempo/pitch-preserving speed changes. Stem offsets align trimmed audio to project time. |
+| Player | Web Audio playback of original and stems, with SoundTouch worklet support for tempo/pitch-preserving speed changes. Trimmed projects play as a section from 0 to the section length. |
 | Transport and mixer | Seek/play/pause, track mute/solo, volume, and synchronized stem playback. |
 | Progress | Job status, stage progress, logs, and cancellation where supported. |
 | Metadata lookup | Optional MusicBrainz and Cover Art Archive lookup; results can populate project metadata. |

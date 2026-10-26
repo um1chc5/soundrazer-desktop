@@ -97,13 +97,36 @@ export async function loadAudio(project) {
       tracks.push({...item, buffer});
     }
     setLoadingProgress('Loaded', 1);
-    player.setTracks(tracks);
+    for (const track of tracks) track.projectOffset = Number(track.offset) || 0;
+    const trim = project.separation?.trim;
+    const original = tracks.find(track => track.file === ORIGINAL_FILE);
+    let section = null;
+    if (trim && original?.buffer) {
+      const start = Number(trim.start);
+      const end = Number(trim.end);
+      if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+        const clamped = {start: Math.max(0, start), end: Math.min(original.buffer.duration, end)};
+        if (clamped.end - clamped.start > 0.001) section = clamped;
+      }
+    }
+    if (section) {
+      for (const track of tracks) {
+        if (track.file === ORIGINAL_FILE) {
+          track.offset = 0;
+          track.bufferOffset = section.start;
+        } else {
+          track.offset = Math.max(0, (Number(track.offset) || 0) - section.start);
+          track.bufferOffset = 0;
+        }
+      }
+    }
+    player.setTracks(tracks, section ? section.end - section.start : null);
     // Hear the separated result by default when there's one to hear; Original stays
     // available to solo for comparison. With no stems yet, Original is the only track
     // and plays normally.
     const hasStems = project.stems.length > 0;
-    const original = player.tracks.find(t => t.file === ORIGINAL_FILE);
-    if (original && hasStems) original.muted = true;
+    const originalTrack = player.tracks.find(t => t.file === ORIGINAL_FILE);
+    if (originalTrack && hasStems) originalTrack.muted = true;
     $('seek').max = player.duration;
     $('duration').textContent = time(player.duration);
     for (const id of ['play', 'restart', 'seek', 'reset-mix', 'playback-speed', 'reset-speed']) $(id).disabled = false;
@@ -112,14 +135,12 @@ export async function loadAudio(project) {
     const ends = stemTracks.map(track => (track.offset || 0) + track.buffer.duration);
     const sectionStart = starts.length ? Math.min(...starts) : 0;
     const sectionEnd = ends.length ? Math.max(...ends) : 0;
-    const trim = project.separation?.trim;
-    const trimmed = trim && Number.isFinite(Number(trim.start)) && Number(trim.end) > Number(trim.start);
-    if (stemTracks.length && (sectionStart > 0 || trimmed)) {
-      if (sectionStart > 0) {
-        await player.seek(sectionStart);
-        $('seek').value = sectionStart;
-        $('elapsed').textContent = time(sectionStart);
-      }
+    if (section) {
+      $('audio-status').textContent = `Playing section 0:00 – ${formatClock(section.end - section.start, 1)} (${(section.end - section.start).toFixed(1)} s)`;
+    } else if (stemTracks.length && sectionStart > 0) {
+      await player.seek(sectionStart);
+      $('seek').value = sectionStart;
+      $('elapsed').textContent = time(sectionStart);
       $('audio-status').textContent = `Playing section ${formatClock(sectionStart, 1)} – ${formatClock(sectionEnd, 1)} (${(sectionEnd - sectionStart).toFixed(1)} s)`;
     } else if (hasStems && Math.max(...ends) - Math.min(...ends) > 0.25) {
       $('audio-status').textContent = 'These stems have different durations. Shorter tracks will end first.';
@@ -137,20 +158,24 @@ export async function loadAudio(project) {
     $('audio-status').append(retry);
   }
 }
-export function drawWave(canvas, buffer, color) {
+export function drawWave(canvas, buffer, color, start = 0, length = null) {
   const width = Math.max(150, canvas.clientWidth);
   const scale = window.devicePixelRatio || 1;
   canvas.width = width * scale; canvas.height = 48 * scale;
   const context = canvas.getContext('2d'); context.scale(scale, scale);
   const data = buffer.getChannelData(0);
   const columns = Math.floor(width / 3);
-  const stride = Math.max(1, Math.floor(data.length / columns));
+  const from = Math.max(0, Math.floor(start * buffer.sampleRate));
+  const to = Math.min(data.length, Math.floor((start + (length ?? buffer.duration)) * buffer.sampleRate));
+  const span = Math.max(1, to - from);
+  const stride = Math.max(1, Math.floor(span / columns));
   context.fillStyle = color;
   for (let i = 0; i < columns; i++) {
     let peak = 0;
     // Real samples, bounded work even on a full-length song.
     const skip = Math.max(1, Math.floor(stride / 64));
-    for (let j = i * stride; j < Math.min((i + 1) * stride, data.length); j += skip) peak = Math.max(peak, Math.abs(data[j]));
+    const end = Math.min(from + (i + 1) * stride, to);
+    for (let j = from + i * stride; j < end; j += skip) peak = Math.max(peak, Math.abs(data[j]));
     const height = Math.max(2, Math.min(46, peak * 60));
     context.fillRect(i * 3, (48 - height) / 2, 2, height);
   }
@@ -193,7 +218,8 @@ export function renderTracks() {
     const value = el('span', 'volume-value', `${Math.round(track.volume * 100)}%`);
     range.oninput = () => { track.volume = Number(range.value); value.textContent = `${Math.round(track.volume * 100)}%`; player.updateMix(); };
     controls.append(range, value); row.append(label, wave, controls); $('tracks').append(row);
-    drawWave(canvas, track.buffer, color);
+    drawWave(canvas, track.buffer, color, track.bufferOffset || 0,
+      track.file === ORIGINAL_FILE ? player.duration : null);
   }
   syncTrackControls();
 }

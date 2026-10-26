@@ -21,7 +21,7 @@ export function openSplitDialog(projectId, track) {
   $('split-trim').replaceChildren();
   $('split-error').textContent = '';
   $('split-submit').disabled = false;
-  const offset = track.offset || 0;
+  const offset = track.projectOffset ?? track.offset ?? 0;
   const duration = track.buffer.duration;
   store.splitProject = projectId;
   store.splitRange = {start: 0, end: duration};
