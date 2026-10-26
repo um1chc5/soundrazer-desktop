@@ -246,6 +246,7 @@ function buildProgress(panel) {
 }
 buildProgress($('job-panel'));
 buildProgress($('yt-panel'));
+buildProgress($('setup-panel'));
 const CIRCUMFERENCE = 2 * Math.PI * 52;
 
 function renderProgress(panel, job) {
