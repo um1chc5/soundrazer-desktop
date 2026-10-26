@@ -11,7 +11,7 @@ EXE = ".exe" if os.name == "nt" else ""
 
 def _candidates():
     here = Path(__file__).resolve()
-    roots = [Path.cwd(), here.parents[1], here.parents[2], *Path(sys.executable).resolve().parents[:3]]
+    roots = [Path.cwd(), here.parents[1], here.parents[1], *Path(sys.executable).resolve().parents[:3]]
     for root in roots:
         yield root
         yield root / "ffmpeg" / "bin"

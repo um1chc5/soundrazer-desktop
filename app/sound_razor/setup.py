@@ -33,7 +33,7 @@ FINALIZE_BAND = 10
 
 
 def _install_dir() -> Path:
-    return Path(__file__).resolve().parents[2]
+    return Path(__file__).resolve().parents[1]
 
 
 def _pyproject() -> Path:

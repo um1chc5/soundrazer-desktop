@@ -125,9 +125,13 @@ function show(name) {
   if (name !== 'song') { selected = null; audioSignature = ''; clearAudio(); }
   render();
 }
-document.querySelectorAll('.tab').forEach(tab => tab.onclick = () => show(tab.dataset.view));
+document.querySelectorAll('.tab').forEach(tab => tab.onclick = () => {
+  if (state.setup?.required && !setupDeclined) { show('setup'); return; }
+  show(tab.dataset.view);
+});
 $('back').onclick = () => show('library');
 function selectProject(id) {
+  if (state.setup?.required && !setupDeclined) { notice('Complete the one-time setup first.', 'error'); show('setup'); return; }
   if (selected === id && view === 'song') return;
   selected = id; resepOpen = false; view = 'song';
   for (const v of ['new', 'library', 'song']) $(`view-${v}`).hidden = v !== 'song';
@@ -376,7 +380,8 @@ function renderSetup() {
       input.checked = setupYoutube;
       input.onchange = () => { setupYoutube = input.checked; };
     }
-    row.append(input, el('span', 'setup-row-label', stage.label), el('span', 'setup-row-size', `~${stage.size_mb} MB`));
+    const status = el('span', stage.done ? 'setup-status setup-status--done' : 'setup-status setup-status--missing', stage.done ? '✓' : '↓');
+    row.append(input, status, el('span', 'setup-row-label', stage.label), el('span', 'setup-row-size', `~${stage.size_mb} MB`));
     list.append(row);
   }
   $('setup-total').textContent = `Total: ~${total} MB · usually 3–8 min on a typical connection`;

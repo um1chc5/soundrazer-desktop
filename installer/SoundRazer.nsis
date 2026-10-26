@@ -74,11 +74,15 @@ Section "SoundRazer Desktop" SecMain
   File /r "embedded\runtime\*"
   SetOutPath "$INSTDIR"
 
-  ; Start Menu entry: embedded pythonw.exe runs the app window, no console.
+  ; Start Menu entry. Uses python.exe (a visible console) rather than pythonw.exe:
+  ; pythonw.exe silently failed to launch at all for at least one real install,
+  ; reproducibly, with nothing in the Application event log and no way for us to
+  ; see why — while python.exe worked immediately on the same machine. Trading the
+  ; console window for "actually opens" until the pythonw failure is understood.
   ; File /r "..\app\*" copies app/'s CONTENTS into $INSTDIR directly (not into an
   ; "$INSTDIR\app" subfolder), so ui_entrypoint.py lands at $INSTDIR's root.
   CreateDirectory "$SMPROGRAMS\${NAME}"
-  CreateShortCut "$SMPROGRAMS\${NAME}\${NAME}.lnk" "$INSTDIR\runtime\pythonw.exe" "$INSTDIR\ui_entrypoint.py" "$INSTDIR\icon.ico"
+  CreateShortCut "$SMPROGRAMS\${NAME}\${NAME}.lnk" "$INSTDIR\runtime\python.exe" "$INSTDIR\ui_entrypoint.py" "$INSTDIR\icon.ico"
   CreateShortCut "$SMPROGRAMS\${NAME}\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
@@ -96,7 +100,7 @@ Section "SoundRazer Desktop" SecMain
 SectionEnd
 
 Section "Desktop shortcut" SecDesktop
-  CreateShortCut "$DESKTOP\${NAME}.lnk" "$INSTDIR\runtime\pythonw.exe" "$INSTDIR\ui_entrypoint.py" "$INSTDIR\icon.ico"
+  CreateShortCut "$DESKTOP\${NAME}.lnk" "$INSTDIR\runtime\python.exe" "$INSTDIR\ui_entrypoint.py" "$INSTDIR\icon.ico"
 SectionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
