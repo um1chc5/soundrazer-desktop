@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from .audio.pipeline import DEFAULT_MODEL, STEM_CHOICES, separate, train
+from .audio.exports import FORMATS
 
 
 def parser() -> argparse.ArgumentParser:
@@ -20,11 +21,20 @@ def parser() -> argparse.ArgumentParser:
     split.add_argument("--model", help=f"Override automatic model selection (default: {DEFAULT_MODEL})")
     split.add_argument("--stems", nargs="+", choices=STEM_CHOICES,
                        help="Stems to save; other includes unselected parts. Default: all six Demucs stems.")
+    split.add_argument("--start", type=float, help="Start of the section in seconds (requires --end)")
+    split.add_argument("--end", type=float, help="End of the section in seconds (requires --start)")
     split.add_argument("--cache", type=Path, default=Path(".sound-razor/models"))
     guitar = commands.add_parser("split-guitar", help="Split an existing guitar stem into lead and rhythm")
     guitar.add_argument("--file", type=Path, required=True)
     guitar.add_argument("--output", type=Path, required=True)
+    guitar.add_argument("--start", type=float, help="Start of the section in seconds (requires --end)")
+    guitar.add_argument("--end", type=float, help="End of the section in seconds (requires --start)")
     guitar.add_argument("--cache", type=Path, default=Path(".sound-razor/models"))
+    export = commands.add_parser("export", help="Copy project stems into other formats")
+    export.add_argument("--project", type=Path, required=True)
+    export.add_argument("--formats", nargs="+", choices=tuple(FORMATS), default=["flac"])
+    export.add_argument("--stems", nargs="+", help="Stem filenames; default all current stems")
+    export.add_argument("--no-prevent-clipping", action="store_true")
     training = commands.add_parser("train", help="Fine-tuning boundary (not implemented)")
     training.add_argument("dataset", type=Path)
     ui = commands.add_parser("ui", help="Open a local project library and stem player in your browser")
@@ -35,11 +45,32 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = parser().parse_args(argv)
+    argument_parser = parser()
+    args = argument_parser.parse_args(argv)
+    if args.command in {"separate", "split-guitar"} and (args.start is None) != (args.end is None):
+        argument_parser.error("--start and --end must be used together.")
     try:
+        trim = (args.start, args.end) if getattr(args, "start", None) is not None else None
         if args.command == "split-guitar":
             from .audio.guitar_split import split_guitar
-            result = [str(path) for path in split_guitar(args.file, args.output, args.cache)]
+            result = [str(path) for path in split_guitar(args.file, args.output, args.cache, trim)]
+        elif args.command == "export":
+            from .audio.exports import export_stems
+            from .projects import describe_project
+            project = args.project.expanduser().resolve()
+            info = describe_project(project)
+            stems = args.stems or [item["file"] for item in info["stems"]]
+
+            last = [None]
+
+            def report(completed, total, label):
+                if label != last[0]:
+                    last[0] = label
+                    print(label, file=sys.stderr, flush=True)
+
+            result = [str(path) for path in export_stems(
+                project, stems, args.formats, not args.no_prevent_clipping, report,
+            )]
         elif args.command == "train":
             train(args.dataset)
             return 0
@@ -51,6 +82,7 @@ def main(argv: list[str] | None = None) -> int:
             result = [str(path) for path in separate(
                 str(args.file) if args.file else args.youtube,
                 args.output, args.model, args.cache, youtube=bool(args.youtube), stems=args.stems,
+                trim=trim,
             )]
         print(json.dumps(result, indent=2))
         return 0

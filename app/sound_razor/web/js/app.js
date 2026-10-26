@@ -4,6 +4,7 @@ import {initNavigation} from './navigation.js';
 import {initTitlebar} from './window.js';
 import './transport.js';
 import './dialogs.js';
+import './folders.js';
 import './lookup.js';
 import {nav} from './store.js';
 import {jobRunning, notice} from './core.js';

@@ -25,10 +25,17 @@ class PackageLayoutTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     webui.selection_stems(preset, stems)
 
+    def test_server_has_project_helpers(self):
+        # Route handlers call these directly; a missing import used to turn every
+        # upload into a 500 ("Unexpected server error").
+        for name in ("import_project", "project_path", "describe_project", "save_metadata", "cover_path"):
+            with self.subTest(name=name):
+                self.assertTrue(callable(getattr(server, name, None)))
+
     def test_static_assets(self):
         static = Path(server.__file__).resolve().parents[1] / "web"
         self.assertEqual(server.STATIC, static)
-        for name in ("index.html", "js/app.js", "css/base.css"):
+        for name in ("index.html", "js/app.js", "js/trim.js", "js/split.js", "css/base.css"):
             with self.subTest(asset=name):
                 self.assertTrue((static / name).is_file())
 

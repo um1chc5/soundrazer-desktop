@@ -6,9 +6,9 @@ SoundRazer Desktop is a local desktop stem separator with a Python backend and v
 
 | # | Spec | Status | Summary / what remains |
 |---:|---|---|---|
-| 01 | [App specification](01-app.md) | Done | Describes current behavior and architecture, planned project fields, and the current layout after the module refactor. |
-| 02 | [Pre-separation trim](02-pre-separation-trim.md) | Todo | Complete specification; backend and frontend trim behavior, offsets, and UI are not implemented. |
-| 03 | [Output formats](03-output-formats.md) | Todo | Complete specification; the export job, conversions, manifest, and UI are not implemented. Canonical stored stems remain 44.1 kHz stereo WAV. |
+| 01 | [App specification](01-app.md) | Done | Describes current behavior and architecture, implemented project fields, and the current layout after the module refactor. |
+| 02 | [Pre-separation trim](02-pre-separation-trim.md) | Done | Overall and guitar-section trim, project-timeline offsets, offset-aware playback, trim editors, and CLI/API support are implemented. |
+| 03 | [Output formats](03-output-formats.md) | Done | Export job, six-format FFmpeg matrix, staging, manifest, reveal route, dialog, and progress are implemented. Canonical stored stems remain 44.1 kHz stereo WAV. |
 | 04 | [First-run setup](04-first-run-setup.md) | Doing | In-app checklist, per-stage progress, optional YouTube toggle, and setup gating exist. Installer/bootstrap consent and the full “setup as the main UI” visual merge remain. |
 | — | Web module/CSS refactor | Done | ES modules are under `web/js/`; five CSS files are under `web/css/`; static serving uses generic safe handling. |
 | — | Python package refactor | Done | Split into `audio/`, `projects/`, and `webui/` is complete; package-layout smoke tests pass. |

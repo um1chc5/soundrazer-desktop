@@ -53,12 +53,74 @@ def ffmpeg_ok() -> bool:
     return (install / "ffmpeg.exe").is_file() and (install / "ffprobe.exe").is_file()
 
 
+def _package_dir(name: str) -> Path | None:
+    """Location of an installed package without importing it (importing torch can
+    take seconds and may fail noisily on a half-written install)."""
+    try:
+        spec = importlib.util.find_spec(name)
+    except (ImportError, ValueError):
+        return None
+    if spec is None:
+        return None
+    if spec.submodule_search_locations:
+        return Path(next(iter(spec.submodule_search_locations)))
+    return Path(spec.origin).parent if spec.origin else None
+
+
+def _binary_ok(path: Path | None, minimum: int) -> bool:
+    """A present-but-zeroed file is exactly what an interrupted pip install leaves
+    behind. Checking the PE header (not just the size) catches those."""
+    if path is None:
+        return False
+    try:
+        if not path.is_file() or path.stat().st_size < minimum:
+            return False
+        with path.open("rb") as stream:
+            head = stream.read(2)
+    except OSError:
+        return False
+    return head == b"MZ" if sys.platform == "win32" else bool(head)
+
+
+def torch_ok() -> bool:
+    root = _package_dir("torch")
+    if root is None:
+        return False
+    if sys.platform != "win32":
+        return (root / "__init__.py").is_file()
+    if not _binary_ok(root / "lib" / "torch_cpu.dll", 10 * 1024 * 1024):
+        return False
+    if not _binary_ok(root / "lib" / "torch_python.dll", 1024 * 1024):
+        return False
+    uv = root / "lib" / "uv.dll"
+    if uv.exists() and not _binary_ok(uv, 10 * 1024):
+        return False
+    extension = next(root.glob("_C*.pyd"), None)
+    return _binary_ok(extension, 1024)
+
+
 def separation_ok() -> bool:
-    return importlib.util.find_spec("audio_separator") is not None
+    # audio_separator can appear installed while torch is only half extracted;
+    # the module check alone made that look like a healthy setup.
+    return importlib.util.find_spec("audio_separator") is not None and torch_ok()
 
 
 def youtube_ok() -> bool:
     return importlib.util.find_spec("yt_dlp") is not None
+
+
+def probe_separation() -> str:
+    """Actually import the engine once after install; a missing DLL only shows up
+    at import time, not from a files-only check."""
+    try:
+        result = subprocess.run([sys.executable, "-c", "import torch, audio_separator"],
+                                capture_output=True, text=True, errors="replace", timeout=180)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return str(error)
+    if result.returncode == 0:
+        return ""
+    detail = (result.stderr or result.stdout).strip().splitlines()
+    return detail[-1] if detail else f"exit {result.returncode}"
 
 
 def stage_requirements(stage: str) -> list[str]:
@@ -172,37 +234,54 @@ def _install_ffmpeg(library, start_progress: int, band: int) -> int:
     return start_progress + band
 
 
-def _pip_install(library, requirements: list[str], stage: str, start_progress: int, band: int) -> int:
+def _pip_install(library, requirements: list[str], stage: str, start_progress: int, band: int,
+                 *, force=False) -> int:
     """pip-install a requirement list, streaming progress through the job."""
     _tick(library, "install", stage, start_progress)
     quoted = " ".join(requirements)
-    _log(library, f"pip install {quoted}")
-    command = [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", *requirements]
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                               text=True, errors="replace")
-    with library.lock:
-        library.process = process
-    milestones = {"Collecting": 0.25, "Installing collected packages": 0.65,
-                  "Successfully installed": 1.0}
-    hit = {name: False for name in milestones}
-    try:
-        for line in process.stdout:
-            if _cancelling(library):
-                process.terminate()
-                raise RuntimeError("Setup cancelled.")
-            line = line.rstrip("\r\n")
-            if not line:
-                continue
-            _log(library, line)
-            for name, fraction in milestones.items():
-                if not hit[name] and line.startswith(name):
-                    hit[name] = True
-                    _tick(library, "install", stage, start_progress + int(band * fraction))
-    finally:
-        if process.poll() is None:
-            process.kill()
-    code = process.wait()
-    if code != 0:
+    attempts = [["--force-reinstall"]] if force else [[]]
+    if force:
+        # A killed pip can leave dist-info/RECORD all zeroes; pip then cannot
+        # parse it to uninstall. Installing over it still restores every file.
+        attempts.append(["--ignore-installed"])
+    for attempt, options in enumerate(attempts):
+        if attempt:
+            _log(library, "Damaged package metadata prevented uninstall; installing over it…")
+        _log(library, f"pip install{' ' + ' '.join(options) if options else ''} {quoted}")
+        command = [sys.executable, "-m", "pip", "install", "--disable-pip-version-check",
+                   *options, *requirements]
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                   text=True, errors="replace")
+        with library.lock:
+            library.process = process
+        milestones = {"Collecting": 0.25, "Installing collected packages": 0.65,
+                      "Successfully installed": 1.0}
+        hit = {name: False for name in milestones}
+        output = []
+        try:
+            for line in process.stdout:
+                if _cancelling(library):
+                    process.terminate()
+                    raise RuntimeError("Setup cancelled.")
+                line = line.rstrip("\r\n")
+                if not line:
+                    continue
+                output.append(line)
+                _log(library, line)
+                for name, fraction in milestones.items():
+                    if not hit[name] and line.startswith(name):
+                        hit[name] = True
+                        _tick(library, "install", stage, start_progress + int(band * fraction))
+        finally:
+            if process.poll() is None:
+                process.kill()
+        code = process.wait()
+        if code == 0:
+            break
+        retry = any("field larger than field limit" in line or "UninstallPathSet" in line
+                    for line in output)
+        if retry and attempt + 1 < len(attempts):
+            continue
         raise RuntimeError(f"pip install failed for {stage} (exit {code}). See the setup log.")
     _tick(library, "install", stage, start_progress + band)
     return start_progress + band
@@ -236,12 +315,21 @@ def run_setup(library, stages: list[str]) -> None:
 
         if "separation" in missing and not separation_ok():
             requirements = stage_requirements("separation")
-            cursor = _pip_install(library, requirements, "separation", cursor, band)
+            # A partial package can still expose audio_separator; force pip to replace
+            # zeroed/interrupted files rather than saying "already satisfied".
+            repair = importlib.util.find_spec("audio_separator") is not None
+            if repair:
+                _log(library, "Repairing an incomplete separation engine install…")
+            cursor = _pip_install(library, requirements, "separation", cursor, band, force=repair)
             _tick(library, "install", "separation", cursor)
+            problem = probe_separation()
+            if problem:
+                raise RuntimeError(f"Separation engine could not be loaded after installation: {problem}")
 
         if "youtube" in missing and not youtube_ok():
             requirements = stage_requirements("youtube")
-            cursor = _pip_install(library, requirements, "youtube", cursor, band)
+            repair = importlib.util.find_spec("yt_dlp") is not None
+            cursor = _pip_install(library, requirements, "youtube", cursor, band, force=repair)
             _tick(library, "install", "youtube", cursor)
 
         # Finalize: make sure everything is actually usable now.

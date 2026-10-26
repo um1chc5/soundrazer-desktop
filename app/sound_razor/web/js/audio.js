@@ -1,11 +1,16 @@
 import {colors, ORIGINAL_COLOR, STEMS, ORIGINAL_FILE} from './constants.js';
-import {$, el, token, time, notice, api, jobRunning, projectUrl} from './core.js';
-import {store, nav} from './store.js';
+import {$, el, token, time, notice, jobRunning, projectUrl} from './core.js';
+import {store} from './store.js';
 import {StemPlayer} from './player.js';
+import {openSplitDialog} from './split.js';
+import {formatClock} from './trim.js';
 export const player = new StemPlayer();
 player.onError = error => notice(error.message);
 export function clearAudio() {
   store.controller?.abort(); store.loading++; player.clear();
+  store.songTrimEditor?.stopPreview();
+  store.newTrimEditor?.stopPreview();
+  store.splitEditor?.stopPreview();
   $('tracks').replaceChildren();
   $('audio-loading').hidden = true;
   for (const id of ['play', 'restart', 'seek', 'reset-mix', 'playback-speed', 'reset-speed']) $(id).disabled = true;
@@ -52,7 +57,7 @@ export function buildLoadItems(project, root) {
   // loadAudio) once they exist, and is the only track when they don't yet, so the song
   // can be previewed before choosing what to separate.
   if (project.original) {
-    items.push({name: 'Original', file: ORIGINAL_FILE,
+    items.push({name: 'Original', file: ORIGINAL_FILE, offset: 0,
       url: `${projectUrl(project.id)}/original?${new URLSearchParams({root})}`});
   }
   for (const item of project.stems) {
@@ -102,9 +107,25 @@ export async function loadAudio(project) {
     $('seek').max = player.duration;
     $('duration').textContent = time(player.duration);
     for (const id of ['play', 'restart', 'seek', 'reset-mix', 'playback-speed', 'reset-speed']) $(id).disabled = false;
-    const durations = tracks.map(t => t.buffer.duration);
-    $('audio-status').textContent = hasStems && Math.max(...durations) - Math.min(...durations) > 0.25
-      ? 'These stems have different durations. Shorter tracks will end first.' : '';
+    const stemTracks = tracks.filter(track => track.file !== ORIGINAL_FILE);
+    const starts = stemTracks.map(track => track.offset || 0);
+    const ends = stemTracks.map(track => (track.offset || 0) + track.buffer.duration);
+    const sectionStart = starts.length ? Math.min(...starts) : 0;
+    const sectionEnd = ends.length ? Math.max(...ends) : 0;
+    const trim = project.separation?.trim;
+    const trimmed = trim && Number.isFinite(Number(trim.start)) && Number(trim.end) > Number(trim.start);
+    if (stemTracks.length && (sectionStart > 0 || trimmed)) {
+      if (sectionStart > 0) {
+        await player.seek(sectionStart);
+        $('seek').value = sectionStart;
+        $('elapsed').textContent = time(sectionStart);
+      }
+      $('audio-status').textContent = `Playing section ${formatClock(sectionStart, 1)} – ${formatClock(sectionEnd, 1)} (${(sectionEnd - sectionStart).toFixed(1)} s)`;
+    } else if (hasStems && Math.max(...ends) - Math.min(...ends) > 0.25) {
+      $('audio-status').textContent = 'These stems have different durations. Shorter tracks will end first.';
+    } else {
+      $('audio-status').textContent = '';
+    }
     renderTracks();
     $('audio-loading').hidden = true;
   } catch (error) {
@@ -149,12 +170,7 @@ export function renderTracks() {
       split.dataset.splitGuitar = ''; split.disabled = !!jobRunning();
       split.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h5c4 0 3-7 7-7h4M9 12c4 0 3 7 7 7h4M17 2l3 3-3 3M17 16l3 3-3 3"/></svg>';
       const projectId = store.selected;
-      const projectRoot = store.state.root;
-      split.onclick = async () => {
-        split.disabled = true;
-        try { await api(`${projectUrl(projectId)}/split-guitar`, {root: projectRoot}); notice(); await nav.refresh(); }
-        catch (error) { notice(error.message, 'error'); split.disabled = !!jobRunning(); }
-      };
+      split.onclick = () => { player.pause(); openSplitDialog(projectId, track); };
       label.querySelector('.track-name').append(split);
     }
     const wave = el('div', 'wave-wrap'); const canvas = el('canvas'); canvas.setAttribute('aria-hidden', 'true');

@@ -59,8 +59,8 @@ export class StemPlayer {
   }
   setTracks(tracks) {
     this.clear();
-    this.tracks = tracks.map(t => ({...t, muted: false, solo: false, volume: 1}));
-    this.duration = Math.max(0, ...tracks.map(t => t.buffer.duration));
+    this.tracks = tracks.map(t => ({...t, offset: Number(t.offset) || 0, muted: false, solo: false, volume: 1}));
+    this.duration = Math.max(0, ...this.tracks.map(t => t.offset + t.buffer.duration));
   }
   async play() {
     if (!this.tracks.length || this.playing || this.starting) return;
@@ -99,14 +99,18 @@ export class StemPlayer {
       }
       this.playing = true;
       for (const track of this.tracks) {
-        if (track.buffer.duration <= this.offset) continue;
+        const trackOffset = track.offset || 0;
+        const local = this.offset - trackOffset;
+        if (local >= track.buffer.duration) continue;
+        const when = startTime + Math.max(0, -local);
+        const bufferOffset = Math.max(0, local);
         const source = context.createBufferSource();
         const gain = context.createGain();
         source.buffer = track.buffer;
         source.playbackRate.value = this.playbackRate;
         source.connect(gain).connect(destination);
         gain.gain.value = this.trackGain(track);
-        if (!this.tempoNode && track.buffer.duration === this.duration) {
+        if (!this.tempoNode && trackOffset + track.buffer.duration >= this.duration - 0.02) {
           source.onended = () => {
             if (generation === this.generation && this.playing && this.position() >= this.duration - 0.02) {
               this.pause(); this.offset = 0;
@@ -114,7 +118,7 @@ export class StemPlayer {
           };
         }
         this.nodes.push({source, gain, track});
-        source.start(startTime, this.offset);
+        source.start(when, bufferOffset);
       }
     } catch (error) {
       if (generation !== this.generation) return;

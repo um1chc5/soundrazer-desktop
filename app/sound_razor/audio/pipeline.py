@@ -4,6 +4,7 @@ import contextlib
 import importlib.util
 import logging
 import json
+import math
 import shutil
 import subprocess
 import sys
@@ -75,12 +76,75 @@ def combine_other(by_stem: dict[str, Path], model_stems: tuple[str, ...],
         mixed.replace(destination)
 
 
-def normalize(source: Path, destination: Path) -> None:
-    subprocess.run([
-        "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
-        "-i", str(source), "-map", "0:a:0", "-vn", "-ar", "44100", "-ac", "2",
-        "-c:a", "pcm_s16le", str(destination),
-    ], check=True, stdout=sys.stderr)
+def probe_duration(path: Path) -> float:
+    try:
+        result = subprocess.run([
+            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            "-of", "default=nw=1:nk=1", str(path),
+        ], capture_output=True, text=True, timeout=30)
+    except FileNotFoundError:
+        raise ValueError(MISSING_FFMPEG) from None
+    except subprocess.TimeoutExpired:
+        raise ValueError(f"Could not read the duration of {Path(path).name}.") from None
+    if result.returncode:
+        raise ValueError(f"Could not read the duration of {Path(path).name}.")
+    try:
+        duration = float(result.stdout.strip())
+    except ValueError:
+        raise ValueError(f"Could not read the duration of {Path(path).name}.") from None
+    if not math.isfinite(duration) or duration <= 0:
+        raise ValueError(f"Could not read the duration of {Path(path).name}.")
+    return duration
+
+
+def parse_trim(trim, duration: float, minimum: float = 1.0):
+    if trim is None:
+        return None
+    if isinstance(trim, dict):
+        start, end = trim.get("start"), trim.get("end")
+    elif isinstance(trim, (list, tuple)) and len(trim) == 2:
+        start, end = trim
+    else:
+        raise ValueError("Choose a valid section.")
+    if (not isinstance(start, (int, float)) or isinstance(start, bool)
+            or not isinstance(end, (int, float)) or isinstance(end, bool)
+            or not math.isfinite(start) or not math.isfinite(end)):
+        raise ValueError("Choose a valid section.")
+    start, end = float(start), float(end)
+    if start < 0:
+        raise ValueError("Choose a valid section.")
+    if start >= end:
+        raise ValueError("Choose a section longer than 1 second.")
+    if end > duration + 0.05:
+        raise ValueError(f"The section ends after the recording ({duration:.1f} s).")
+    if end - start < minimum - 1e-9:
+        if minimum == 1:
+            raise ValueError("Choose a section longer than 1 second.")
+        raise ValueError(f"Choose a section of at least {minimum:g} seconds.")
+    return round(start, 3), round(end, 3)
+
+
+def normalize(source: Path, destination: Path, trim=None) -> None:
+    args = ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y"]
+    duration = None
+    if trim:
+        start, end = trim
+        duration = probe_duration(source)
+        args += ["-ss", f"{start:.6f}"]
+    args += ["-i", str(source)]
+    filters = []
+    if trim:
+        start, end = trim
+        args += ["-t", f"{end - start:.6f}"]
+        if start > 0.0005:
+            filters.append("afade=t=in:st=0:d=0.005")
+        if end < duration - 0.0005:
+            filters.append(f"afade=t=out:st={max(0.0, end - start - 0.005):.6f}:d=0.005")
+    if filters:
+        args += ["-af", ",".join(filters)]
+    args += ["-map", "0:a:0", "-vn", "-ar", "44100", "-ac", "2",
+             "-c:a", "pcm_s16le", str(destination)]
+    subprocess.run(args, check=True, stdout=sys.stderr)
 
 
 def output_directory(source: str, output: Path | None, youtube: bool = False) -> Path:
@@ -101,7 +165,7 @@ def output_directory(source: str, output: Path | None, youtube: bool = False) ->
 
 def separate(source: str, output: Path | None = None, model: str | None = None,
              cache: Path = Path(".sound-razor/models"), youtube: bool = False,
-             stems: list[str] | None = None) -> list[Path]:
+             stems: list[str] | None = None, trim=None) -> list[Path]:
     model, selected_stems = select_model(model, stems)
     if not youtube and not Path(source).expanduser().is_file():
         raise ValueError(f"Audio file does not exist: {source}")
@@ -120,10 +184,11 @@ def separate(source: str, output: Path | None = None, model: str | None = None,
     with tempfile.TemporaryDirectory(prefix="sound-razor-") as temporary:
         work = Path(temporary)
         audio = youtube_audio(source, work) if youtube else Path(source).expanduser().resolve()
+        saved_trim = parse_trim(trim, probe_duration(audio), 1.0) if trim is not None else None
         normalized = work / "input.wav"
         # Phase markers below are parsed by the UI for its progress display.
         print("Preparing audio", file=sys.stderr, flush=True)
-        normalize(audio, normalized)
+        normalize(audio, normalized, saved_trim)
         print(f"Loading model {model}", file=sys.stderr, flush=True)
         # Upstream progress/prints must not corrupt the JSON result on stdout.
         with contextlib.redirect_stdout(sys.stderr):
@@ -161,7 +226,10 @@ def separate(source: str, output: Path | None = None, model: str | None = None,
             stage = Path(staged)
             for path in paths:
                 shutil.copyfile(path, stage / path.name)
-            (stage / settings.name).write_text(json.dumps({"stems": selected_stems}, indent=2) + "\n")
+            settings_value = {"stems": selected_stems}
+            if saved_trim is not None:
+                settings_value["trim"] = {"start": saved_trim[0], "end": saved_trim[1]}
+            (stage / settings.name).write_text(json.dumps(settings_value, indent=2) + "\n")
             validate_outputs(original, destinations + [settings])
             for destination in destinations + [settings]:
                 (stage / destination.name).replace(destination)

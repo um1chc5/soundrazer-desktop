@@ -1,9 +1,121 @@
-import {$, activeProject, jobRunning, api, notice, projectUrl} from '../core.js';
+import {$, el, activeProject, jobRunning, api, notice, projectUrl} from '../core.js';
 import {store, nav} from '../store.js';
 import {renderProgress} from '../progress.js';
 import {pickerValue, pickerValid} from '../picker.js';
-import {loadAudio} from '../audio.js';
+import {loadAudio, player} from '../audio.js';
 import {coverImage} from '../covers.js';
+import {ORIGINAL_FILE, EXPORT_FORMATS} from '../constants.js';
+import {TrimEditor, trimRequest, sectionText, formatClock} from '../trim.js';
+function storedTrim(project, duration) {
+  const trim = project.separation?.trim;
+  if (!trim || typeof trim !== 'object') return null;
+  const start = Number(trim.start);
+  const end = Number(trim.end);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) return null;
+  const clamped = {start: Math.min(start, duration), end: Math.min(end, duration)};
+  return clamped.end > clamped.start ? clamped : null;
+}
+function renderSongChip() {
+  const chip = $('song-trim-chip');
+  const range = store.songTrimRange;
+  const duration = store.songTrimEditor?.duration || 0;
+  chip.replaceChildren();
+  if (!range || !duration || (range.start <= 0.001 && range.end >= duration - 0.001)) {
+    chip.hidden = true;
+    return;
+  }
+  chip.hidden = false;
+  chip.append(el('span', '', sectionText(range)));
+  const clear = el('button', 'text-button', 'Clear');
+  clear.type = 'button';
+  clear.onclick = () => store.songTrimEditor?.setRange(0, duration);
+  chip.append(clear);
+}
+function renderSongTrim(project) {
+  const host = $('song-trim');
+  host.hidden = !project.original;
+  if (!project.original) return;
+  if (store.songTrimKey && !store.songTrimKey.startsWith(`${project.id}:`)) {
+    store.songTrimEditor?.destroy();
+    store.songTrimEditor = null;
+    store.songTrimRange = null;
+    store.songTrimKey = '';
+    $('song-trim-editor').replaceChildren();
+    $('song-trim-chip').replaceChildren();
+    $('song-trim-chip').hidden = true;
+  }
+  const original = player.tracks.find(track => track.file === ORIGINAL_FILE);
+  if (!original?.buffer) {
+    $('song-trim-chip').hidden = true;
+    if (!store.songTrimEditor) $('song-trim-editor').textContent = 'Loading the original waveform…';
+    return;
+  }
+  const duration = original.buffer.duration;
+  const trim = storedTrim(project, duration);
+  const key = `${project.id}:${duration}:${trim ? `${trim.start}-${trim.end}` : 'full'}`;
+  if (store.songTrimEditor && store.songTrimKey === key) {
+    renderSongChip();
+    return;
+  }
+  store.songTrimEditor?.destroy();
+  $('song-trim-editor').replaceChildren();
+  const range = trim || {start: 0, end: duration};
+  store.songTrimRange = range;
+  store.songTrimEditor = new TrimEditor($('song-trim-editor'), {
+    duration,
+    buffer: original.buffer,
+    start: range.start,
+    end: range.end,
+    onChange: value => { store.songTrimRange = value; renderSongChip(); },
+    onPreview: () => { if (player.playing || player.starting) player.pause(); },
+  });
+  store.songTrimKey = key;
+  renderSongChip();
+}
+function exportOptions(host, items, checked, kind) {
+  host.replaceChildren(...items.map(([value, title, sub]) => {
+    const label = el('label', `export-option export-${kind}`);
+    const input = el('input');
+    input.type = 'checkbox';
+    input.value = value;
+    input.checked = checked(value);
+    const text = el('span', 'export-option-text');
+    text.append(el('strong', '', title), el('small', '', sub || ''));
+    label.append(input, text);
+    return label;
+  }));
+}
+function openExportDialog(success = false) {
+  const project = activeProject();
+  if (!project) return;
+  exportOptions($('export-formats'), EXPORT_FORMATS, value => value === 'flac', 'format');
+  exportOptions($('export-stems'), project.stems.map(item => [item.file, item.name, '']), () => true, 'stem');
+  const syncExportSubmit = () => {
+    const formats = $('export-formats').querySelectorAll('input:checked').length;
+    const stems = $('export-stems').querySelectorAll('input:checked').length;
+    $('export-submit').disabled = !formats || !stems || !!jobRunning();
+  };
+  $('export-formats').onchange = syncExportSubmit;
+  $('export-stems').onchange = syncExportSubmit;
+  const stems = player.tracks.filter(track => track.file !== ORIGINAL_FILE);
+  const start = stems.length ? Math.min(...stems.map(track => track.offset || 0)) : 0;
+  const end = stems.length ? Math.max(...stems.map(track => (track.offset || 0) + track.buffer.duration)) : 0;
+  const trim = project.separation?.trim;
+  const trimmed = trim && Number(trim.end) > Number(trim.start);
+  const sectioned = stems.length > 0 && (start > 0 || trimmed);
+  const sectionStart = start > 0 ? start : Math.max(0, Number(trim?.start) || 0);
+  const sectionLength = end > start ? end - start : Math.max(0, Number(trim?.end) - Number(trim?.start) || 0);
+  $('export-section-note').hidden = !sectioned;
+  $('export-section-note').textContent = sectioned
+    ? `These stems are a ${sectionLength.toFixed(1)} s section starting at ${formatClock(sectionStart, 1)}.` : '';
+  $('export-success').hidden = !success;
+  $('export-reveal').hidden = !success;
+  $('export-clipping').checked = true;
+  $('export-warning').hidden = true;
+  $('export-error').textContent = '';
+  syncExportSubmit();
+  if (!$('export-dialog').open) $('export-dialog').showModal();
+}
 /* ---------- song view ---------- */
 export function renderSong() {
   const project = activeProject();
@@ -38,19 +150,61 @@ export function renderSong() {
   $('separate').textContent = jobRunning() && !busyHere ? 'Another job is running…' : hasStems ? 'Separate again' : 'Separate stems';
   $('delete-open').disabled = !!busyHere;
   $('resep-open').disabled = !!jobRunning();
+  $('export-open').disabled = !hasStems || !!jobRunning();
   document.querySelectorAll('[data-split-guitar]').forEach(button => { button.disabled = !!jobRunning(); });
+  if (store.exportPending && job && store.exportPending.jobId === job.id) {
+    if (job.status === 'succeeded' && store.exportOffered !== job.id) {
+      store.exportOffered = job.id;
+      store.exportPending = null;
+      openExportDialog(true);
+    } else if (['failed', 'cancelled'].includes(job.status)) {
+      store.exportPending = null;
+    }
+  }
+  if (!busyHere && !$('resep-panel').hidden) renderSongTrim(project);
   const signature = JSON.stringify([store.state.root, project.id, project.stems, project.original]);
   if (signature !== store.audioSignature && !busyHere) {
     store.audioSignature = signature;
-    loadAudio(project).catch(error => { if (error.name !== 'AbortError') notice(error.message, 'error'); });
+    loadAudio(project)
+      .then(() => { if (store.view === 'song' && store.selected === project.id) renderSong(); })
+      .catch(error => { if (error.name !== 'AbortError') notice(error.message, 'error'); });
   }
 }
 $('resep-open').onclick = () => { store.resepOpen = true; renderSong(); $('resep-panel').scrollIntoView({behavior: 'smooth', block: 'nearest'}); };
-$('resep-close').onclick = () => { store.resepOpen = false; renderSong(); };
+$('resep-close').onclick = () => { store.songTrimEditor?.stopPreview(); store.resepOpen = false; renderSong(); };
 $('separate').onclick = async () => {
-  if (!store.selected) return; $('separate').disabled = true;
-  try { await api(`${projectUrl(store.selected)}/separate`, {root: store.state.root, ...pickerValue($('song-stems'))}); store.resepOpen = false; await nav.refresh(); }
-  catch (error) { notice(error.message, 'error'); renderSong(); }
+  if (!store.selected) return; $('separate').disabled = true; store.songTrimEditor?.stopPreview();
+  const trim = trimRequest(store.songTrimRange, store.songTrimEditor?.duration || 0);
+  try {
+    await api(`${projectUrl(store.selected)}/separate`, {
+      root: store.state.root, ...pickerValue($('song-stems')), ...(trim ? {trim} : {}),
+    });
+    store.resepOpen = false;
+    await nav.refresh();
+  } catch (error) { notice(error.message, 'error'); renderSong(); }
 };
-$('reveal').onclick = () => api(`${projectUrl(store.selected)}/reveal`, {root: store.state.root}).catch(e => notice(e.message, 'error'));
+$('reveal').onclick = () => api(`${projectUrl(store.selected)}/reveal`, {root: store.state.root, target: 'project'}).catch(e => notice(e.message, 'error'));
+$('export-open').onclick = () => openExportDialog(false);
+$('export-clipping').onchange = () => { $('export-warning').hidden = $('export-clipping').checked; };
+$('export-reveal').onclick = () => api(`${projectUrl(store.selected)}/reveal`, {root: store.state.root, target: 'exports'}).catch(e => notice(e.message, 'error'));
+$('export-form').onsubmit = async event => {
+  event.preventDefault();
+  if (!store.selected || jobRunning()) return;
+  const formats = [...$('export-formats').querySelectorAll('input:checked')].map(input => input.value);
+  const stems = [...$('export-stems').querySelectorAll('input:checked')].map(input => input.value);
+  if (!formats.length) { $('export-error').textContent = 'Choose at least one format.'; return; }
+  if (!stems.length) { $('export-error').textContent = 'Choose at least one stem.'; return; }
+  $('export-submit').disabled = true;
+  try {
+    const job = await api(`${projectUrl(store.selected)}/export`, {
+      root: store.state.root, formats, stems, prevent_clipping: $('export-clipping').checked,
+    });
+    store.exportPending = {jobId: job.id, project: store.selected};
+    $('export-dialog').close();
+    await nav.refresh();
+  } catch (error) {
+    $('export-error').textContent = error.message;
+    $('export-submit').disabled = false;
+  }
+};
 

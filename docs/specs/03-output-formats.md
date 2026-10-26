@@ -1,6 +1,6 @@
 # 03 — Export stems in other output formats
 
-Status: Todo
+Status: Done
 
 What this covers: on-demand copies of canonical WAV stems into common delivery formats without changing the working stems.
 
@@ -8,9 +8,9 @@ What this covers: on-demand copies of canonical WAV stems into common delivery f
 
 ### Implementation status
 
-- [ ] Export job, cancellable FFmpeg conversions, staging, and manifest.
-- [ ] Export API/CLI contract and safe exports-folder reveal.
-- [ ] Export dialog, progress, and acceptance checks.
+- [x] Export job, cancellable FFmpeg conversions, staging, and manifest.
+- [x] Export API/CLI contract and safe exports-folder reveal.
+- [x] Export dialog, progress, and acceptance checks.
 
 ## 1. Problem
 

@@ -1,4 +1,4 @@
-import {SETUP_STEPS, YOUTUBE_STEPS, GUITAR_STEPS, SEPARATION_STEPS, SETUP_STAGE_LABEL, SETUP_PHASE_TITLE, SETUP_PHASE_SUB} from './constants.js';
+import {SETUP_STEPS, YOUTUBE_STEPS, GUITAR_STEPS, SEPARATION_STEPS, EXPORT_STEPS, SETUP_STAGE_LABEL, SETUP_PHASE_TITLE, SETUP_PHASE_SUB} from './constants.js';
 import {$, el, api, notice, serverNow, duration} from './core.js';
 import {store, nav} from './store.js';
 /* ---------- progress view ---------- */
@@ -32,21 +32,17 @@ export const CIRCUMFERENCE = 2 * Math.PI * 52;
 export function renderProgress(panel, job) {
   const youtube = job.kind === 'youtube';
   const setup = job.kind === 'setup';
-  const steps = setup ? SETUP_STEPS : youtube ? YOUTUBE_STEPS : job.guitar_split ? GUITAR_STEPS : SEPARATION_STEPS;
+  const exportJob = job.kind === 'export';
+  const steps = setup ? SETUP_STEPS : youtube ? YOUTUBE_STEPS : exportJob ? EXPORT_STEPS : job.guitar_split ? GUITAR_STEPS : SEPARATION_STEPS;
   const running = ['running', 'cancelling'].includes(job.status);
   const phase = setup ? job.phase : job.status === 'succeeded' ? 'done' : job.phase === 'download' && !youtube ? 'load' : job.phase;
   const progress = job.status === 'succeeded' ? 100 : Math.max(0, Math.min(100, job.progress || 0));
   panel.dataset.status = job.status;
-  panel.classList.toggle('busy', running && (setup ? true : youtube ? progress === 0 : phase !== 'separate'));
+  panel.classList.toggle('busy', running && (setup ? true : youtube ? progress === 0 : phase !== 'separate' && phase !== 'export'));
   panel.querySelector('.pv-num').textContent = Math.floor(progress);
   panel.querySelector('.pv-bar').style.strokeDasharray = `${CIRCUMFERENCE}`;
   panel.querySelector('.pv-bar').style.strokeDashoffset = `${CIRCUMFERENCE * (1 - progress / 100)}`;
   panel.querySelector('.pv-linebar i').style.width = `${progress}%`;
-  const titles = {prepare: job.guitar_split ? 'Loading the guitar model' : 'Preparing audio', load: job.phase === 'download' ? 'Downloading AI model' : 'Loading AI model',
-    download: 'Downloading from YouTube', separate: job.guitar_split ? 'Splitting guitar into lead & rhythm' : 'Separating stems', finalize: youtube ? 'Creating project' : 'Saving stems'};
-  const subs = {prepare: 'Converting to 44.1 kHz stereo WAV', load: job.phase === 'download' ? 'First run only, this can take a few minutes' : 'Getting the neural network ready',
-    download: 'Fetching the best audio stream', separate: 'The AI model is working through your track', finalize: 'Almost done'};
-  const ended = {succeeded: youtube ? 'Download complete' : 'Separation complete', failed: youtube ? 'Download failed' : 'Separation failed', cancelled: 'Cancelled'};
   let title, sub;
   if (setup) {
     const stage = job.stage; const what = stage ? ` ${SETUP_STAGE_LABEL[stage] || ''}` : '';
@@ -54,11 +50,17 @@ export function renderProgress(panel, job) {
     const phaseSubs = {...SETUP_PHASE_SUB};
     title = job.status === 'cancelling' ? 'Stopping…' : running ? phaseTitles[phase] || 'Working…' : (job.status === 'succeeded' ? 'Setup complete' : 'Setup failed');
     sub = running ? phaseSubs[phase] || '' : job.error || (job.status === 'succeeded' ? 'You can separate tracks now.' : '');
+  } else if (exportJob) {
+    const titles = {prepare: 'Preparing export', export: 'Converting stems', finalize: 'Writing exports'};
+    const ended = {succeeded: 'Export complete', failed: 'Export failed', cancelled: 'Cancelled'};
+    title = job.status === 'cancelling' ? 'Stopping…' : running ? titles[phase] || 'Working…' : ended[job.status];
+    sub = running ? 'Lossless and lossy copies stay inside this project.' : job.error || (job.status === 'succeeded' ? 'Your exported copies are ready.' : '');
   } else {
     const titles = {prepare: job.guitar_split ? 'Loading the guitar model' : 'Preparing audio', load: job.phase === 'download' ? 'Downloading AI model' : 'Loading AI model',
       download: 'Downloading from YouTube', separate: job.guitar_split ? 'Splitting guitar into lead & rhythm' : 'Separating stems', finalize: youtube ? 'Creating project' : 'Saving stems'};
     const subs = {prepare: 'Converting to 44.1 kHz stereo WAV', load: job.phase === 'download' ? 'First run only, this can take a few minutes' : 'Getting the neural network ready',
       download: 'Fetching the best audio stream', separate: 'The AI model is working through your track', finalize: 'Almost done'};
+    const ended = {succeeded: youtube ? 'Download complete' : 'Separation complete', failed: youtube ? 'Download failed' : 'Separation failed', cancelled: 'Cancelled'};
     title = job.status === 'cancelling' ? 'Stopping…' : running ? titles[phase] || 'Working…' : ended[job.status];
     sub = running ? subs[phase] || '' : job.error || (job.status === 'succeeded' ? 'Your stems are ready.' : '');
   }

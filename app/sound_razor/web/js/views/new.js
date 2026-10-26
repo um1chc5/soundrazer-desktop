@@ -3,8 +3,11 @@ import {$, el, notice, stem, api, sep, projectUrl, jobRunning, token} from '../c
 import {store, nav} from '../store.js';
 import {pickerValue, pickerValid} from '../picker.js';
 import {renderProgress} from '../progress.js';
+import {player} from '../audio.js';
+import {TrimEditor, trimRequest, sectionText} from '../trim.js';
 /* ---------- new separation ---------- */
 export function setSource(mode) {
+  if (mode !== 'file') store.newTrimEditor?.stopPreview();
   store.sourceMode = mode;
   $('src-file').setAttribute('aria-selected', String(mode === 'file'));
   $('src-yt').setAttribute('aria-selected', String(mode === 'youtube'));
@@ -13,22 +16,94 @@ export function setSource(mode) {
 }
 $('src-file').onclick = () => setSource('file');
 $('src-yt').onclick = () => setSource('youtube');
+function resetNewTrim() {
+  store.newTrimEpoch = (store.newTrimEpoch || 0) + 1;
+  store.newTrimEditor?.destroy();
+  store.newTrimEditor = null;
+  store.newTrimRange = null;
+  store.newTrimDuration = 0;
+  store.newBuffer = null;
+  $('new-trim-editor').replaceChildren();
+  $('new-trim-chip').replaceChildren();
+  $('new-trim-chip').hidden = true;
+}
+async function prepareNewTrim(file) {
+  resetNewTrim();
+  const epoch = store.newTrimEpoch;
+  const url = URL.createObjectURL(file);
+  const audio = new Audio();
+  audio.preload = 'metadata';
+  const detected = await new Promise(resolve => {
+    audio.onloadedmetadata = () => resolve(audio.duration || 0);
+    audio.onerror = () => resolve(0);
+    audio.src = url;
+  }).finally(() => URL.revokeObjectURL(url));
+  let buffer = null;
+  try { buffer = await player.ensureContext().decodeAudioData(await file.arrayBuffer()); } catch (_) { /* waveform is optional */ }
+  if (epoch !== store.newTrimEpoch) return;
+  store.newBuffer = buffer;
+  const duration = buffer?.duration || detected || 0;
+  store.newTrimDuration = Number.isFinite(duration) ? duration : 0;
+  store.newTrimRange = store.newTrimDuration ? {start: 0, end: store.newTrimDuration} : null;
+  renderNew();
+}
 export function chooseFile(file) {
   if (!file) return;
   const ext = (file.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
   if (!AUDIO_EXTENSIONS.includes(ext)) { notice(`${file.name} is not a supported audio file.`, 'error'); return; }
   store.chosenFile = file; $('start-error').textContent = '';
   $('new-title').placeholder = stem(file.name).replaceAll('_', ' ');
+  prepareNewTrim(file);
   renderNew();
 }
 $('audio-file').onchange = () => chooseFile($('audio-file').files[0]);
-$('file-clear').onclick = () => { store.chosenFile = null; $('audio-file').value = ''; $('new-title').placeholder = 'Uses the file name'; renderNew(); };
+$('file-clear').onclick = () => { resetNewTrim(); store.chosenFile = null; $('audio-file').value = ''; $('new-title').placeholder = 'Uses the file name'; renderNew(); };
 const zone = $('dropzone');
 zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragging'); });
 zone.addEventListener('dragleave', () => zone.classList.remove('dragging'));
 zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('dragging'); chooseFile(e.dataTransfer.files[0]); });
 $('youtube-url').oninput = () => renderNew();
 
+function renderNewChip() {
+  const chip = $('new-trim-chip');
+  const range = store.newTrimRange;
+  const duration = store.newTrimEditor?.duration || store.newTrimDuration;
+  chip.replaceChildren();
+  if (!range || !duration || (range.start <= 0.001 && range.end >= duration - 0.001)) {
+    chip.hidden = true;
+    return;
+  }
+  chip.hidden = false;
+  chip.append(el('span', '', sectionText(range)));
+  const clear = el('button', 'text-button', 'Clear');
+  clear.type = 'button';
+  clear.onclick = () => store.newTrimEditor?.setRange(0, duration);
+  chip.append(clear);
+}
+function renderNewTrim() {
+  const host = $('new-trim');
+  const available = store.sourceMode === 'file' && !!store.chosenFile;
+  host.hidden = !available;
+  if (!available) return;
+  const hint = $('new-trim-hint');
+  if (!store.newTrimDuration) {
+    hint.textContent = 'Reading the duration… You can still separate the full file.';
+    $('new-trim-editor').replaceChildren();
+    $('new-trim-chip').hidden = true;
+    return;
+  }
+  hint.textContent = 'Optional: process only part of this song. The original file stays complete.';
+  if (!store.newTrimEditor) {
+    store.newTrimEditor = new TrimEditor($('new-trim-editor'), {
+      duration: store.newTrimDuration,
+      buffer: store.newBuffer,
+      start: store.newTrimRange?.start ?? 0,
+      end: store.newTrimRange?.end ?? store.newTrimDuration,
+      onChange: range => { store.newTrimRange = range; renderNewChip(); },
+    });
+  }
+  renderNewChip();
+}
 export function renderNew() {
   $('dropzone').hidden = !!store.chosenFile; $('file-card').hidden = !store.chosenFile;
   if (store.chosenFile) {
@@ -51,6 +126,7 @@ export function renderNew() {
   $('start').textContent = jobRunning() && !store.busy ? 'Another job is running…' : store.busy ? 'Starting…' : 'Start separation';
   $('folder-open').disabled = store.busy || !!jobRunning();
   $('folder-default').disabled = store.busy || !!jobRunning();
+  renderNewTrim();
 }
 export function newFields() {
   return Object.fromEntries(['title', 'artist', 'album', 'year'].map(key => [key, $(`new-${key}`).value.trim()]));
@@ -76,13 +152,16 @@ export function upload(file, data) {
 $('start').onclick = async () => {
   if (store.busy || jobRunning()) return;
   if (store.state.setup?.required) { notice('Complete the one-time setup first.', 'error'); return; }
+  store.newTrimEditor?.stopPreview();
   const choice = pickerValue($('new-stems'));
+  const trim = store.sourceMode === 'file' ? trimRequest(store.newTrimRange, store.newTrimDuration) : null;
   store.busy = true; $('start-error').textContent = ''; renderNew();
   try {
     if (store.sourceMode === 'file') {
       $('upload-box').hidden = false; $('upload-progress').value = 0; $('upload-pct').textContent = '0%';
       const project = await upload(store.chosenFile, newFields());
-      await api(`${projectUrl(project.id)}/separate`, {root: store.state.root, ...choice});
+      await api(`${projectUrl(project.id)}/separate`, {root: store.state.root, ...choice, ...(trim ? {trim} : {})});
+      resetNewTrim();
       store.chosenFile = null; $('audio-file').value = ''; for (const k of ['title', 'artist', 'album', 'year']) $(`new-${k}`).value = '';
       await nav.refresh(); nav.selectProject(project.id);
     } else {

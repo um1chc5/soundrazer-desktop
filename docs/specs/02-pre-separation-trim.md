@@ -1,6 +1,6 @@
 # 02 — Pre-separation trim (overall and guitar)
 
-Status: Todo
+Status: Done
 
 What this covers: non-destructive section selection before overall separation and guitar lead/rhythm splitting, with offset playback against the full original.
 
@@ -8,10 +8,10 @@ What this covers: non-destructive section selection before overall separation an
 
 ### Implementation status
 
-- [ ] Backend trim validation, normalization, persistence, and guitar slicing.
-- [ ] CLI/API trim arguments and project stem offsets.
-- [ ] Offset-aware playback and trim editors in New and Song views.
-- [ ] Automated acceptance checks and export-manifest integration.
+- [x] Backend trim validation, normalization, persistence, and guitar slicing.
+- [x] CLI/API trim arguments and project stem offsets.
+- [x] Offset-aware playback and trim editors in New and Song views.
+- [x] Automated acceptance checks and export-manifest integration.
 
 ## 1. Problem
 

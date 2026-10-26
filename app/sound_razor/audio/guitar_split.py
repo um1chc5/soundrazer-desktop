@@ -1,11 +1,13 @@
 """Reference-free lead guitar inference with the tested listra92 checkpoint."""
 import contextlib
 import json
+import math
 from pathlib import Path
 import sys
 import tempfile
 from .model_cache import cached_download
 from .output_files import validate_outputs
+from .pipeline import parse_trim
 
 MODEL_URL = ('https://huggingface.co/noblebarkrr/mvsepless_resources/resolve/main/'
              'mel_band_roformer/mbr_lead_rhythm_guitar_listra92.ckpt')
@@ -17,7 +19,7 @@ def checkpoint(cache):
     return cached_download(MODEL_URL, destination, MODEL_SHA256)
 
 
-def split_guitar(source: Path, output: Path, cache: Path) -> list[Path]:
+def split_guitar(source: Path, output: Path, cache: Path, trim=None) -> list[Path]:
     source = source.expanduser().resolve()
     output = output.expanduser().resolve()
     if not source.is_file():
@@ -28,6 +30,12 @@ def split_guitar(source: Path, output: Path, cache: Path) -> list[Path]:
     settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
     if not isinstance(settings, dict):
         raise ValueError('Separation settings must contain a JSON object.')
+    saved = settings.get('trim')
+    base = 0.0
+    if isinstance(saved, dict):
+        value = saved.get('start', 0)
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0:
+            base = float(value)
     try:
         import numpy as np
         import soundfile as sf
@@ -35,7 +43,22 @@ def split_guitar(source: Path, output: Path, cache: Path) -> list[Path]:
         from ..vendor.roformer.mel_band_roformer import MelBandRoformer
     except ImportError as error:
         raise RuntimeError('Install guitar splitting support: pip install -e ".[guitars]"') from error
-    mix, sr = sf.read(source, dtype='float32', always_2d=True)
+    info = sf.info(source)
+    local_trim = parse_trim(trim, info.frames / info.samplerate, 2.0) if trim is not None else None
+    if local_trim is not None:
+        start_frame = round(local_trim[0] * info.samplerate)
+        frames = min(info.frames - start_frame, round((local_trim[1] - local_trim[0]) * info.samplerate))
+        mix, sr = sf.read(source, dtype='float32', always_2d=True,
+                          start=start_frame, frames=max(0, frames))
+        fade = round(0.005 * info.samplerate)
+        if fade > 0 and len(mix) > 0:
+            length = min(fade, len(mix))
+            if local_trim[0] > 0.0005:
+                mix[:length] *= np.linspace(0, 1, length, dtype='float32')[:, None]
+            if local_trim[1] < info.frames / info.samplerate - 0.0005:
+                mix[-length:] *= np.linspace(1, 0, length, dtype='float32')[:, None]
+    else:
+        mix, sr = sf.read(source, dtype='float32', always_2d=True)
     if sr != 44100 or mix.shape[1] != 2 or len(mix) == 0 or not np.isfinite(mix).all():
         raise ValueError('Guitar splitting requires a nonempty, finite stereo 44.1 kHz guitar stem.')
     weights = checkpoint(cache)
@@ -82,6 +105,11 @@ def split_guitar(source: Path, output: Path, cache: Path) -> list[Path]:
         raise RuntimeError('Guitar model produced invalid audio.')
     output.mkdir(parents=True, exist_ok=True)
     settings['lead_rhythm_split'] = {'model': 'listra92', 'sha256': MODEL_SHA256, 'overlap': 0.5}
+    if local_trim is not None:
+        settings['lead_rhythm_split']['trim'] = {
+            'start': round(base + local_trim[0], 3),
+            'end': round(base + local_trim[1], 3),
+        }
     with tempfile.TemporaryDirectory(prefix='.guitar-split-', dir=output) as temporary:
         stage = Path(temporary)
         sf.write(stage/paths[0].name, lead, sr, subtype='FLOAT')

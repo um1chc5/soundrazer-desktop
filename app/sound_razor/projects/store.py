@@ -1,6 +1,7 @@
 """Portable song projects: an original recording, optional metadata, and stems."""
 
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -57,6 +58,24 @@ def read_metadata(project: Path) -> dict:
     return data
 
 
+def valid_trim(value):
+    if not isinstance(value, dict):
+        return None
+    start, end = value.get("start"), value.get("end")
+    if (not isinstance(start, (int, float)) or isinstance(start, bool)
+            or not isinstance(end, (int, float)) or isinstance(end, bool)
+            or not math.isfinite(start) or not math.isfinite(end)):
+        return None
+    start, end = float(start), float(end)
+    if start < 0 or end <= start:
+        return None
+    return {"start": start, "end": end}
+
+
+def is_guitar_split_stem(name: str) -> bool:
+    return name in {"lead", "rhythm", "guitar-target", "guitar-remainder"} or name.startswith("guitar-target-")
+
+
 def project_path(root: Path, identifier: str) -> Path:
     if not identifier or identifier.startswith(".") or Path(identifier).name != identifier or "\\" in identifier:
         raise ValueError("Invalid project identifier.")
@@ -103,6 +122,22 @@ def describe_project(path: Path) -> dict:
         except (ValueError, OSError):
             separation = {}
             warnings.append("Could not read separation settings.")
+    trim_warning = False
+    separation_trim = None
+    if "trim" in separation:
+        separation_trim = valid_trim(separation.get("trim"))
+        if separation_trim is None:
+            separation.pop("trim", None)
+            trim_warning = True
+    split_trim = None
+    lead_rhythm = separation.get("lead_rhythm_split")
+    if isinstance(lead_rhythm, dict) and "trim" in lead_rhythm:
+        split_trim = valid_trim(lead_rhythm.get("trim"))
+        if split_trim is None:
+            lead_rhythm.pop("trim", None)
+            trim_warning = True
+    if trim_warning:
+        warnings.append("Separation settings: invalid trim range.")
     split = separation.get("guitar_split")
     labels = {f"guitar-target-{i}": item["title"] for i, item in enumerate(split or [], 1)}
     if split:
@@ -119,8 +154,11 @@ def describe_project(path: Path) -> dict:
             if p.is_file() and not p.is_symlink() and p.suffix.lower() == ".wav":
                 if p.name == "guitar.wav" and split and (stems_dir / "guitar-target-1.wav").is_file():
                     continue  # Retain the unsplit source on disk without doubling playback.
-                stems.append({"name": labels.get(p.stem, p.stem), "file": p.name, "bytes": p.stat().st_size,
-                              "version": p.stat().st_mtime_ns})
+                trim = split_trim if is_guitar_split_stem(p.stem) else separation_trim
+                name = labels.get(p.stem, p.stem)
+                stems.append({"name": name[:1].upper() + name[1:], "file": p.name, "bytes": p.stat().st_size,
+                              "version": p.stat().st_mtime_ns,
+                              "offset": float(trim["start"]) if trim else 0.0})
     cover = cover_path(path, data)
     return {"id": path.name, **fields, "cover": cover.name if cover else None,
             "title": fields["title"] or (Path(original).stem if original else path.name),

@@ -5,5 +5,10 @@ export const store = {
   chosenFile: null, pending: null, resepOpen: false, announced: null,
   setupDeclined: false, setupYoutube: false, setupJobAnnounced: null, setupRunningStages: [],
   lookupSelections: {edit: null}, lookupEpoch: {edit: 0}, coverImages: new Map(),
+  newTrimEditor: null, newTrimRange: null, newTrimDuration: 0, newBuffer: null,
+  newTrimEpoch: 0,
+  songTrimEditor: null, songTrimRange: null, songTrimKey: '',
+  splitEditor: null, splitRange: null, splitProject: null,
+  exportPending: null, exportOffered: null,
 };
 export const nav = {show() {}, selectProject() {}, refresh() {}, render() {}};

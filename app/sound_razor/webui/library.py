@@ -19,6 +19,8 @@ from ..projects import (atomic_json, describe_project, import_project, list_proj
                        project_path, save_metadata, cover_path, metadata_fields)
 from ..projects.metadata import MetadataLookup
 from ..audio.sources import youtube_url, youtube_command
+from ..audio.pipeline import probe_duration, parse_trim
+from ..audio.exports import FORMATS, export_stems
 from ..tools import MISSING_FFMPEG, ensure_ffmpeg_on_path
 from ..setup_env import (FFMPEG_SIZE_MB, RUNTIME_SIZE_MB, SEPARATION_SIZE_MB, YOUTUBE_SIZE_MB,
                          ffmpeg_ok, runtime_ok, separation_ok, youtube_ok, run_setup)
@@ -44,7 +46,8 @@ GUITAR_PROGRESS = re.compile(r"^Guitar split (\d{1,3})%")
 # (marker printed by the CLI, phase, overall progress when the phase starts)
 PHASE_MARKERS = (("Preparing audio", "prepare", 2), ("Loading model", "load", 6),
                  ("Downloading ", "download", 6), ("Separating with", "separate", 12),
-                 ("Splitting guitar", "separate", 12), ("Writing stems", "finalize", 96))
+                 ("Splitting guitar", "separate", 12), ("Writing stems", "finalize", 96),
+                 ("Exporting stems", "export", 2), ("Exported ", "finalize", 96))
 SEPARATE_RANGE = (12, 95)
 YTDLP_PROGRESS = re.compile(r"\[download\]\s+([\d.]+)%(?:.*ETA\s+([\d:]+))?")
 
@@ -164,7 +167,7 @@ class Library:
                 job["eta_at"] = time.time()
         return True
 
-    def start(self, identifier: str, preset: str, stems=None, *, guitar_split=False):
+    def start(self, identifier: str, preset: str, stems=None, *, guitar_split=False, trim=None):
         with self.lock:
             if self.running() or self.worker is not None and self.worker.is_alive():
                 raise ValueError("Another download or separation is already running.")
@@ -182,12 +185,19 @@ class Library:
                     raise ValueError('The stems folder must contain regular files only.')
                 if any((project/'stems'/name).exists() for name in ('lead.wav', 'rhythm.wav')):
                     raise ValueError('This project already contains lead or rhythm tracks.')
+                trim_source = project / 'stems' / 'guitar.wav'
+                saved_trim = parse_trim(trim, probe_duration(trim_source), 2.0) if trim is not None else None
+            else:
+                saved_trim = parse_trim(trim, probe_duration(project / info["original"]), 1.0) if trim is not None else None
             self.logs.clear()
             self.job = {"id": uuid.uuid4().hex, "project": identifier, "status": "running",
                         "started": time.time(), "finished": None, "error": None,
                         "preset": preset, "stems": chosen, "guitar_split": guitar_split,
+                        "trim": {"start": saved_trim[0], "end": saved_trim[1]} if saved_trim else None,
                         "phase": "prepare", "progress": 0, "eta": None}
-            self.worker = threading.Thread(target=self._separate, args=(project, info["original"], chosen, guitar_split), daemon=True)
+            self.worker = threading.Thread(target=self._separate,
+                                           args=(project, info["original"], chosen, guitar_split, saved_trim),
+                                           daemon=True)
             self.worker.start()
             return dict(self.job)
 
@@ -307,17 +317,20 @@ class Library:
                 self.job['finished'] = time.time()
                 self.process = None
 
-    def _separate(self, project: Path, original: str, stems: list[str], guitar_split=False):
+    def _separate(self, project: Path, original: str, stems: list[str], guitar_split=False, trim=None):
         try:
             with tempfile.TemporaryDirectory(prefix=".separation-", dir=project) as temporary:
                 stage = Path(temporary) / "stems"
+                range_args = ["--start", f"{trim[0]:.3f}", "--end", f"{trim[1]:.3f}"] if trim else []
                 if guitar_split:
                     shutil.copytree(project/'stems', stage)
                     command = [sys.executable, '-m', 'sound_razor', 'split-guitar',
-                               '--file', str(stage/'guitar.wav'), '--output', str(stage), '--cache', str(self.cache)]
+                               '--file', str(stage/'guitar.wav'), '--output', str(stage),
+                               '--cache', str(self.cache), *range_args]
                 else:
                     command = [sys.executable, "-m", "sound_razor", "separate", "--file", str(project / original),
-                               "--output", str(stage), "--cache", str(self.cache), "--stems", *stems]
+                               "--output", str(stage), "--cache", str(self.cache), "--stems", *stems,
+                               *range_args]
                 env = dict(os.environ, PYTHONUNBUFFERED="1", ORT_DISABLE_TELEMETRY="1")
                 with self.lock:
                     if self.job["status"] == "cancelling":
@@ -365,6 +378,88 @@ class Library:
                 if self.job["status"] == "cancelling":
                     self.job["status"] = "cancelled"
                 self.job["finished"] = time.time()
+                self.process = None
+
+    def start_export(self, identifier: str, formats, stems, *, prevent_clipping=True):
+        with self.lock:
+            if self.running() or self.worker is not None and self.worker.is_alive():
+                raise ValueError("Another download or separation is already running.")
+            project = project_path(self.require_root(), identifier)
+            info = describe_project(project)
+            if not info["stems"]:
+                raise ValueError("This project has no stems to export.")
+            if not isinstance(formats, list) or not formats:
+                raise ValueError("Choose at least one export format.")
+            chosen_formats = []
+            for format_id in formats:
+                if not isinstance(format_id, str) or format_id not in FORMATS:
+                    raise ValueError("Unknown export format.")
+                if format_id not in chosen_formats:
+                    chosen_formats.append(format_id)
+            if not isinstance(stems, list) or not stems:
+                raise ValueError("Choose at least one stem to export.")
+            if not isinstance(prevent_clipping, bool):
+                raise ValueError("Invalid clipping setting.")
+            available = {item["file"] for item in info["stems"]}
+            chosen_stems = []
+            for name in stems:
+                if not isinstance(name, str) or name not in available:
+                    raise ValueError("Unknown stem to export.")
+                if name not in chosen_stems:
+                    chosen_stems.append(name)
+            exports = project / "exports"
+            if exports.is_symlink() or (exports.exists() and not exports.is_dir()):
+                raise ValueError("The exports folder must be a real directory.")
+            if not ensure_ffmpeg_on_path():
+                raise ValueError(MISSING_FFMPEG)
+            self.logs.clear()
+            self.job = {"id": uuid.uuid4().hex, "kind": "export", "project": identifier,
+                        "status": "running", "started": time.time(), "finished": None, "error": None,
+                        "formats": chosen_formats, "stems": chosen_stems,
+                        "prevent_clipping": bool(prevent_clipping),
+                        "phase": "prepare", "progress": 0, "eta": None}
+            self.worker = threading.Thread(
+                target=self._export,
+                args=(project, chosen_formats, chosen_stems, bool(prevent_clipping)),
+                daemon=True,
+            )
+            self.worker.start()
+            return dict(self.job)
+
+    def _export(self, project: Path, formats: list[str], stems: list[str], prevent_clipping: bool):
+        try:
+            def report(completed, total, label):
+                with self.lock:
+                    if not self.job or self.job["status"] == "cancelling":
+                        raise RuntimeError("Export cancelled.")
+                    fraction = completed / total if total else 0
+                    self.job["phase"] = "finalize" if completed >= total else "export"
+                    self.job["progress"] = max(2, min(96, 2 + fraction * 93))
+                    if fraction > 0.02:
+                        self.job["eta"] = (time.time() - self.job["started"]) / fraction + 1
+                        self.job["eta_at"] = time.time()
+
+            def set_process(process):
+                with self.lock:
+                    if process is not None and self.job and self.job["status"] == "cancelling":
+                        process.terminate()
+                    self.process = process
+
+            export_stems(project, stems, formats, prevent_clipping, report, set_process)
+            with self.lock:
+                if self.job["status"] == "cancelling":
+                    return
+                self.job.update(status="succeeded", progress=100, phase="done", eta=0)
+        except Exception as error:
+            with self.lock:
+                if self.job["status"] != "cancelling":
+                    self.job.update(status="failed", error=str(error))
+        finally:
+            with self.lock:
+                if self.job and self.job["status"] == "cancelling":
+                    self.job["status"] = "cancelled"
+                if self.job:
+                    self.job["finished"] = time.time()
                 self.process = None
 
     def delete(self, identifier: str, expected_root: str):

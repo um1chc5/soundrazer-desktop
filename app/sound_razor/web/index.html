@@ -101,7 +101,7 @@
 
           <div id="pane-yt" hidden>
             <label class="field">YouTube link<input id="youtube-url" type="url" placeholder="https://www.youtube.com/watch?v=…"></label>
-            <p class="hint">Only download videos you have the right to use. Audio is extracted with yt-dlp.</p>
+            <p class="hint">Only download videos you have the right to use. Audio is extracted with yt-dlp. YouTube imports run full-length first; trim afterwards with Separate again.</p>
           </div>
 
           <details class="song-details">
@@ -119,7 +119,14 @@
           <div class="card-step"><span class="step-badge">2</span><h2 id="stems-h">Stems to extract</h2></div>
           <div id="new-stems" class="stem-picker"></div>
 
-          <div class="card-step"><span class="step-badge">3</span><h2>Save to</h2></div>
+          <div class="card-step"><span class="step-badge">3</span><h2>Section</h2></div>
+          <div id="new-trim" class="trim-section" hidden>
+            <p id="new-trim-hint" class="hint"></p>
+            <div id="new-trim-editor"></div>
+            <div id="new-trim-chip" class="trim-chip" hidden></div>
+          </div>
+
+          <div class="card-step"><span class="step-badge">4</span><h2>Save to</h2></div>
           <div class="output-row">
             <span class="folder-glyph" aria-hidden="true"></span>
             <div class="output-text">
@@ -189,6 +196,7 @@
           </div>
           <div class="song-actions">
             <button id="reveal" class="btn btn-ghost btn-sm icon-folder">Open folder</button>
+            <button id="export-open" class="btn btn-ghost btn-sm icon-download" disabled>Export</button>
             <button id="edit-open" class="btn btn-ghost btn-sm icon-edit">Edit</button>
             <button id="delete-open" class="btn btn-ghost btn-sm btn-danger icon-trash" aria-label="Delete song"></button>
           </div>
@@ -204,6 +212,10 @@
             <button id="resep-close" class="icon-btn icon-close" aria-label="Close" hidden></button>
           </div>
           <div id="song-stems" class="stem-picker"></div>
+          <div id="song-trim" class="trim-section" hidden>
+            <div class="trim-head"><h3>Section</h3><div id="song-trim-chip" class="trim-chip" hidden></div></div>
+            <div id="song-trim-editor"></div>
+          </div>
           <div class="resep-footer"><button id="separate" class="btn btn-primary icon-split">Separate stems</button></div>
         </section>
 
@@ -289,6 +301,36 @@
       <code id="delete-path" class="path-code"></code>
       <p id="delete-error" class="form-error" role="alert"></p>
       <div class="dialog-footer"><button type="button" class="btn btn-ghost close-dialog">Keep it</button><button id="delete-submit" type="submit" class="btn btn-danger-solid">Delete permanently</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="split-dialog">
+    <form id="split-form">
+      <header class="dialog-header"><h2>Split guitar</h2><button type="button" class="close-dialog icon-close" aria-label="Close"></button></header>
+      <p class="dialog-sub">Choose a section of the guitar track for the lead and rhythm split. The guitar stem itself is not changed.</p>
+      <div id="split-trim"></div>
+      <div id="split-chip" class="trim-chip" hidden></div>
+      <p id="split-error" class="form-error" role="alert"></p>
+      <div class="dialog-footer"><button type="button" class="btn btn-ghost close-dialog">Cancel</button><button id="split-submit" type="submit" class="btn btn-primary">Split into lead &amp; rhythm</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="export-dialog" class="dialog-wide">
+    <form id="export-form">
+      <header class="dialog-header"><h2>Export stems</h2><button type="button" class="close-dialog icon-close" aria-label="Close"></button></header>
+      <p class="dialog-sub">Copies are written to this song’s <code>exports</code> folder; existing files of the same name are replaced.</p>
+      <div class="export-section"><h3>Formats</h3><div id="export-formats" class="export-grid"></div></div>
+      <div class="export-section"><h3>Stems</h3><div id="export-stems" class="export-grid"></div></div>
+      <p id="export-section-note" class="hint" hidden></p>
+      <label class="check-row"><input id="export-clipping" type="checkbox" checked> Prevent clipping</label>
+      <p id="export-warning" class="hint warning-text" hidden>Stems that peak above full scale will clip in lossy formats.</p>
+      <p id="export-success" class="hint" hidden>Export complete. The selected copies are ready.</p>
+      <p id="export-error" class="form-error" role="alert"></p>
+      <div class="dialog-footer">
+        <button id="export-reveal" type="button" class="btn btn-ghost" hidden>Open exports folder</button>
+        <button type="button" class="btn btn-ghost close-dialog">Close</button>
+        <button id="export-submit" type="submit" class="btn btn-primary">Export</button>
+      </div>
     </form>
   </dialog>
 </body>

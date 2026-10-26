@@ -2,7 +2,7 @@
 
 Status: Done
 
-What this covers: the current product, its behavior and architecture, plus the planned project fields and package layout.
+What this covers: the current product, its behavior and architecture, plus the project fields and package layout.
 
 ## Product
 
@@ -46,11 +46,11 @@ A project is a directory containing the original source, generated stems, and JS
 │   ├── vocals.wav                  # canonical working stems (44.1 kHz stereo)
 │   ├── guitar.wav
 │   └── ...
-└── exports/                        # planned on-demand copies; not canonical
+└── exports/                        # on-demand copies; not canonical
     └── manifest.json
 ```
 
-`describe_project()` presents original-file details, metadata, available stems, byte/version information, and warnings. Each stem gains a project-timeline `offset` when section separation is implemented; default is zero. Optional `separation.json` trim settings will record the absolute project-time section for main stems and guitar-split stems. Export copies and their manifest are planned; stored stems remain canonical 44.1 kHz stereo WAV. See [02 — Pre-separation trim](02-pre-separation-trim.md) and [03 — Output formats](03-output-formats.md).
+`describe_project()` presents original-file details, metadata, available stems, byte/version information, and warnings. Each stem carries a project-timeline `offset`; the default is zero. Optional `separation.json` trim settings record the absolute project-time section for main stems and guitar-split stems. Export copies and their manifest live in `exports/`; stored stems remain canonical 44.1 kHz stereo WAV. See [02 — Pre-separation trim](02-pre-separation-trim.md) and [03 — Output formats](03-output-formats.md).
 
 ## Separation pipeline
 
@@ -60,7 +60,7 @@ A project is a directory containing the original source, generated stems, and JS
 4. Run local inference and validate outputs. Selected stems are written; unselected parts are folded into `other` where applicable.
 5. Optionally run the guitar lead/rhythm splitter on `guitar.wav`. The source guitar stem remains available.
 
-FFmpeg is used for normalization and media operations. The model cache tracks download/checksum state. Pre-separation section trimming and export copies are specified but not implemented; see specs 02 and 03.
+FFmpeg is used for normalization, section trimming, export conversion, and media operations. The model cache tracks download/checksum state. See specs 02 and 03 for trimming and export behavior.
 
 ## Web UI
 
@@ -70,7 +70,7 @@ FFmpeg is used for normalization and media operations. The model cache tracks do
 | Library | Browse, search, and manage local projects. |
 | Song | View/edit metadata, inspect stems, open the project folder, delete, and play/mix stems. |
 | Setup | Show required and optional setup components and their stage progress; gate actions until required setup is complete. See [04 — First-run setup](04-first-run-setup.md). |
-| Player | Web Audio playback of original and stems, with SoundTouch worklet support for tempo/pitch-preserving speed changes. Planned stem offsets align trimmed audio to project time. |
+| Player | Web Audio playback of original and stems, with SoundTouch worklet support for tempo/pitch-preserving speed changes. Stem offsets align trimmed audio to project time. |
 | Transport and mixer | Seek/play/pause, track mute/solo, volume, and synchronized stem playback. |
 | Progress | Job status, stage progress, logs, and cancellation where supported. |
 | Metadata lookup | Optional MusicBrainz and Cover Art Archive lookup; results can populate project metadata. |

@@ -7,6 +7,15 @@ export const AUDIO_EXTENSIONS = ['.wav', '.flac', '.mp3', '.opus', '.ogg', '.m4a
 export const SEPARATION_STEPS = [['prepare', 'Prepare audio'], ['load', 'Load AI model'], ['separate', 'Separate stems'], ['finalize', 'Save stems']];
 export const GUITAR_STEPS = [['prepare', 'Load model'], ['separate', 'Split guitar'], ['finalize', 'Save tracks']];
 export const YOUTUBE_STEPS = [['download', 'Download audio'], ['finalize', 'Create project']];
+export const EXPORT_STEPS = [['prepare', 'Check files'], ['export', 'Convert stems'], ['finalize', 'Write files']];
+export const EXPORT_FORMATS = [
+  ['flac', 'FLAC', 'Lossless · default'],
+  ['mp3', 'MP3 320', 'Universal compatibility'],
+  ['opus', 'Opus 192', 'Smallest files'],
+  ['m4a', 'M4A 256', 'Apple ecosystem'],
+  ['wav16', 'WAV 16-bit', 'DAW-safe'],
+  ['aiff', 'AIFF', 'Hardware and DAW workflows'],
+];
 export const SETUP_STEPS = [['prepare', 'Check setup'], ['download', 'Download components'], ['install', 'Install packages'], ['finalize', 'Finish']];
 export const SETUP_STAGE_LABEL = {ffmpeg: 'FFmpeg', separation: 'the separation engine', youtube: 'YouTube support'};
 export const SETUP_PHASE_TITLE = {prepare: 'Checking what’s needed', download: 'Downloading components', install: 'Installing packages', finalize: 'Finishing up'};

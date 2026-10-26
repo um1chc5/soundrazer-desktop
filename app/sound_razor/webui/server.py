@@ -13,6 +13,7 @@ import tempfile
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from .library import Library
+from ..projects import cover_path, describe_project, import_project, project_path, save_metadata
 from ..tools import MISSING_FFMPEG, ensure_ffmpeg_on_path
 
 STATIC = Path(__file__).resolve().parents[1] / "web"
@@ -32,7 +33,7 @@ def make_server(library: Library, port: int = 8765):
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Content-Security-Policy", "default-src 'self'; img-src 'self' blob: data:; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; object-src 'none'; frame-ancestors 'none'")
+            self.send_header("Content-Security-Policy", "default-src 'self'; img-src 'self' blob: data:; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; media-src 'self' blob:; object-src 'none'; frame-ancestors 'none'")
             self.end_headers()
             self.wfile.write(body)
 
@@ -170,11 +171,22 @@ def make_server(library: Library, port: int = 8765):
                         self.respond(200, cover.read_bytes(), 'image/png' if cover.suffix == '.png' else 'image/jpeg')
                         return None
                     if method == "POST" and len(parts) == 4 and parts[3] == "separate":
-                        return library.start(parts[2], data.get("preset", "vocals"), data.get("stems"))
+                        return library.start(parts[2], data.get("preset", "vocals"), data.get("stems"),
+                                             trim=data.get("trim"))
                     if method == "POST" and len(parts) == 4 and parts[3] == "split-guitar":
-                        return library.start(parts[2], 'guitar', guitar_split=True)
+                        return library.start(parts[2], 'guitar', guitar_split=True, trim=data.get("trim"))
+                    if method == "POST" and len(parts) == 4 and parts[3] == "export":
+                        return library.start_export(parts[2], data.get("formats"), data.get("stems"),
+                                                    prevent_clipping=data.get("prevent_clipping", True))
                     if method == "POST" and len(parts) == 4 and parts[3] == "reveal":
-                        target = project / "stems" if (project / "stems").is_dir() else project
+                        name = data.get("target", "project")
+                        targets = {"project": project, "stems": project / "stems",
+                                   "exports": project / "exports"}
+                        if name not in targets:
+                            raise ValueError("Unknown folder target.")
+                        target = targets[name]
+                        if name in {"stems", "exports"} and (target.is_symlink() or not target.is_dir()):
+                            raise ValueError("Folder not found.")
                         if os.name == "nt":
                             os.startfile(target)
                         else:
