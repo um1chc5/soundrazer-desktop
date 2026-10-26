@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from .pipeline import DEFAULT_MODEL, STEM_CHOICES, separate, train
+from .audio.pipeline import DEFAULT_MODEL, STEM_CHOICES, separate, train
 
 
 def parser() -> argparse.ArgumentParser:
@@ -38,13 +38,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
         if args.command == "split-guitar":
-            from .guitar_split import split_guitar
+            from .audio.guitar_split import split_guitar
             result = [str(path) for path in split_guitar(args.file, args.output, args.cache)]
         elif args.command == "train":
             train(args.dataset)
             return 0
         elif args.command == "ui":
-            from .ui import serve
+            from .webui import serve
             serve(args.projects, args.port, args.cache)
             return 0
         else:

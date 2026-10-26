@@ -32,7 +32,7 @@ def split_guitar(source: Path, output: Path, cache: Path) -> list[Path]:
         import numpy as np
         import soundfile as sf
         import torch
-        from .vendor.roformer.mel_band_roformer import MelBandRoformer
+        from ..vendor.roformer.mel_band_roformer import MelBandRoformer
     except ImportError as error:
         raise RuntimeError('Install guitar splitting support: pip install -e ".[guitars]"') from error
     mix, sr = sf.read(source, dtype='float32', always_2d=True)
@@ -41,7 +41,7 @@ def split_guitar(source: Path, output: Path, cache: Path) -> list[Path]:
     weights = checkpoint(cache)
     torch.set_num_threads(4)
     torch.manual_seed(42)
-    config = json.loads((Path(__file__).parent / 'vendor/roformer/lead_rhythm.json').read_text())
+    config = json.loads((Path(__file__).resolve().parents[1] / 'vendor/roformer/lead_rhythm.json').read_text())
     config['multi_stft_resolutions_window_sizes'] = tuple(config['multi_stft_resolutions_window_sizes'])
     with contextlib.redirect_stdout(sys.stderr):
         model = MelBandRoformer(**config)

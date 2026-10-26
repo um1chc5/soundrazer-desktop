@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import hashlib
 
-from .tools import MISSING_FFMPEG
+from ..tools import MISSING_FFMPEG
 
 AUDIO_EXTENSIONS = {".wav", ".flac", ".mp3", ".opus", ".ogg", ".m4a", ".aac", ".aiff", ".aif"}
 METADATA_FIELDS = ("title", "artist", "album", "year")

@@ -1,0 +1,200 @@
+import {colors, ORIGINAL_COLOR, STEMS, ORIGINAL_FILE} from './constants.js';
+import {$, el, token, time, notice, api, jobRunning, projectUrl} from './core.js';
+import {store, nav} from './store.js';
+import {StemPlayer} from './player.js';
+export const player = new StemPlayer();
+player.onError = error => notice(error.message);
+export function clearAudio() {
+  store.controller?.abort(); store.loading++; player.clear();
+  $('tracks').replaceChildren();
+  $('audio-loading').hidden = true;
+  for (const id of ['play', 'restart', 'seek', 'reset-mix', 'playback-speed', 'reset-speed']) $(id).disabled = true;
+  $('seek').value = 0; $('seek').max = 1; $('elapsed').textContent = '0:00'; $('duration').textContent = '0:00';
+}
+export function buildStemPills(items) {
+  const pills = new Map();
+  $('audio-loading-stems').replaceChildren(...items.map(item => {
+    const pill = el('span', 'stem-pill', item.name);
+    pills.set(item.file, pill);
+    return pill;
+  }));
+  return pills;
+}
+export function setLoadingProgress(label, fraction) {
+  $('audio-loading-label').textContent = label;
+  const pct = Math.round(Math.max(0, Math.min(1, fraction)) * 100);
+  $('audio-loading-pct').textContent = `${pct}%`;
+  $('audio-loading-bar').value = pct;
+}
+// Reads the response as a stream instead of one arrayBuffer() call so loading can show
+// real byte progress (stems run tens of MB each) rather than just "file i of n".
+export async function fetchWithProgress(url, signal, onBytes) {
+  const response = await fetch(url, {headers: {'X-sound-razor-Token': token}, signal});
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const total = Number(response.headers.get('Content-Length')) || 0;
+  if (!response.body) { onBytes(total, total); return new Uint8Array(await response.arrayBuffer()).buffer; }
+  const reader = response.body.getReader();
+  const chunks = []; let received = 0;
+  for (;;) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    chunks.push(value); received += value.length;
+    onBytes(received, total);
+  }
+  const buffer = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) { buffer.set(chunk, offset); offset += chunk.length; }
+  return buffer.buffer;
+}
+export function buildLoadItems(project, root) {
+  const items = [];
+  // Original plays alongside the separated stems (muted by default, for A/B — see
+  // loadAudio) once they exist, and is the only track when they don't yet, so the song
+  // can be previewed before choosing what to separate.
+  if (project.original) {
+    items.push({name: 'Original', file: ORIGINAL_FILE,
+      url: `${projectUrl(project.id)}/original?${new URLSearchParams({root})}`});
+  }
+  for (const item of project.stems) {
+    items.push({...item, url: `${projectUrl(project.id)}/audio/${encodeURIComponent(item.file)}?${new URLSearchParams({root})}`});
+  }
+  return items;
+}
+export async function loadAudio(project) {
+  clearAudio();
+  const epoch = store.loading;
+  const root = store.state.root;
+  store.controller = new AbortController();
+  const signal = store.controller.signal;
+  const items = buildLoadItems(project, root);
+  if (!items.length) { $('audio-status').textContent = ''; return; }
+  const tracks = [];
+  const pills = buildStemPills(items);
+  const received = new Array(items.length).fill(0);
+  const totals = new Array(items.length).fill(0);
+  $('audio-loading').hidden = false;
+  setLoadingProgress(`Loading ${items[0].name}…`, 0);
+  try {
+    for (const [i, item] of items.entries()) {
+      pills.get(item.file)?.classList.add('loading');
+      setLoadingProgress(`Loading ${item.name} · ${i + 1} of ${items.length}`,
+        received.reduce((a, b) => a + b, 0) / (totals.reduce((a, b) => a + b, 0) || 1));
+      const encoded = await fetchWithProgress(item.url, signal, (got, total) => {
+        received[i] = got; totals[i] = total || Math.max(total, got);
+        const knownTotal = totals.reduce((a, b) => a + b, 0);
+        const fraction = knownTotal ? received.reduce((a, b) => a + b, 0) / knownTotal : i / items.length;
+        setLoadingProgress(`Loading ${item.name} · ${i + 1} of ${items.length}`, fraction);
+      }).catch(error => { throw new Error(`Could not load ${item.name}. Refresh the library and try again. (${error.message})`); });
+      if (epoch !== store.loading) return;
+      const buffer = await player.ensureContext().decodeAudioData(encoded);
+      if (epoch !== store.loading) return;
+      pills.get(item.file)?.classList.replace('loading', 'done');
+      tracks.push({...item, buffer});
+    }
+    setLoadingProgress('Loaded', 1);
+    player.setTracks(tracks);
+    // Hear the separated result by default when there's one to hear; Original stays
+    // available to solo for comparison. With no stems yet, Original is the only track
+    // and plays normally.
+    const hasStems = project.stems.length > 0;
+    const original = player.tracks.find(t => t.file === ORIGINAL_FILE);
+    if (original && hasStems) original.muted = true;
+    $('seek').max = player.duration;
+    $('duration').textContent = time(player.duration);
+    for (const id of ['play', 'restart', 'seek', 'reset-mix', 'playback-speed', 'reset-speed']) $(id).disabled = false;
+    const durations = tracks.map(t => t.buffer.duration);
+    $('audio-status').textContent = hasStems && Math.max(...durations) - Math.min(...durations) > 0.25
+      ? 'These stems have different durations. Shorter tracks will end first.' : '';
+    renderTracks();
+    $('audio-loading').hidden = true;
+  } catch (error) {
+    if (epoch !== store.loading || error.name === 'AbortError') return;
+    $('audio-loading').hidden = true;
+    $('audio-status').replaceChildren(el('span', '', `Audio could not load: ${error.message} `));
+    const retry = el('button', 'text-button', 'Retry');
+    retry.onclick = () => loadAudio(project);
+    $('audio-status').append(retry);
+  }
+}
+export function drawWave(canvas, buffer, color) {
+  const width = Math.max(150, canvas.clientWidth);
+  const scale = window.devicePixelRatio || 1;
+  canvas.width = width * scale; canvas.height = 48 * scale;
+  const context = canvas.getContext('2d'); context.scale(scale, scale);
+  const data = buffer.getChannelData(0);
+  const columns = Math.floor(width / 3);
+  const stride = Math.max(1, Math.floor(data.length / columns));
+  context.fillStyle = color;
+  for (let i = 0; i < columns; i++) {
+    let peak = 0;
+    // Real samples, bounded work even on a full-length song.
+    const skip = Math.max(1, Math.floor(stride / 64));
+    for (let j = i * stride; j < Math.min((i + 1) * stride, data.length); j += skip) peak = Math.max(peak, Math.abs(data[j]));
+    const height = Math.max(2, Math.min(46, peak * 60));
+    context.fillRect(i * 3, (48 - height) / 2, 2, height);
+  }
+}
+export function renderTracks() {
+  $('tracks').replaceChildren();
+  for (const [index, track] of player.tracks.entries()) {
+    const isOriginal = track.file === ORIGINAL_FILE;
+    const color = isOriginal ? ORIGINAL_COLOR : (STEMS.find(([value]) => `${value}.wav` === track.file)?.[2] || colors[index % colors.length]);
+    const row = el('div', isOriginal ? 'track track-original' : 'track'); row.style.setProperty('--track-color', color);
+    const label = el('div'); label.append(el('div', 'track-name', track.name[0].toUpperCase() + track.name.slice(1)),
+      el('div', 'track-detail', `${track.buffer.numberOfChannels === 1 ? 'MONO' : 'STEREO'} · ${time(track.buffer.duration)}`));
+    if (track.file === 'guitar.wav') {
+      const split = el('button', 'split-guitar');
+      split.type = 'button'; split.title = 'Split into lead and rhythm';
+      split.setAttribute('aria-label', 'Split into lead and rhythm');
+      split.dataset.splitGuitar = ''; split.disabled = !!jobRunning();
+      split.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h5c4 0 3-7 7-7h4M9 12c4 0 3 7 7 7h4M17 2l3 3-3 3M17 16l3 3-3 3"/></svg>';
+      const projectId = store.selected;
+      const projectRoot = store.state.root;
+      split.onclick = async () => {
+        split.disabled = true;
+        try { await api(`${projectUrl(projectId)}/split-guitar`, {root: projectRoot}); notice(); await nav.refresh(); }
+        catch (error) { notice(error.message, 'error'); split.disabled = !!jobRunning(); }
+      };
+      label.querySelector('.track-name').append(split);
+    }
+    const wave = el('div', 'wave-wrap'); const canvas = el('canvas'); canvas.setAttribute('aria-hidden', 'true');
+    wave.append(canvas, el('span', 'playhead'));
+    wave.onclick = event => {
+      if (!player.duration) return;
+      const box = wave.getBoundingClientRect();
+      player.seek(Math.max(0, Math.min(1, (event.clientX - box.left) / box.width)) * player.duration).catch(e => notice(e.message, 'error'));
+    };
+    const controls = el('div', 'track-controls');
+    for (const [key, text] of [['muted', 'M'], ['solo', 'S']]) {
+      const button = el('button', '', text);
+      button.setAttribute('aria-label', `${key === 'muted' ? 'Mute' : 'Solo'} ${track.name}`);
+      button.setAttribute('aria-pressed', String(track[key]));
+      button.onclick = () => { track[key] = !track[key]; player.updateMix(); syncTrackControls(); };
+      button.dataset.control = key; controls.append(button);
+    }
+    const range = el('input'); range.type = 'range'; range.min = 0; range.max = 1; range.step = .01; range.value = track.volume;
+    range.setAttribute('aria-label', `${track.name} volume`);
+    const value = el('span', 'volume-value', `${Math.round(track.volume * 100)}%`);
+    range.oninput = () => { track.volume = Number(range.value); value.textContent = `${Math.round(track.volume * 100)}%`; player.updateMix(); };
+    controls.append(range, value); row.append(label, wave, controls); $('tracks').append(row);
+    drawWave(canvas, track.buffer, color);
+  }
+  syncTrackControls();
+}
+export function syncTrackControls() {
+  [...$('tracks').children].forEach((row, i) => {
+    const track = player.tracks[i];
+    row.classList.toggle('muted', player.trackGain(track) === 0);
+    row.querySelector('[data-control=muted]').setAttribute('aria-pressed', String(track.muted));
+    row.querySelector('[data-control=solo]').setAttribute('aria-pressed', String(track.solo));
+  });
+}
+export function animate() {
+  const position = player.position();
+  $('elapsed').textContent = time(position);
+  if (document.activeElement !== $('seek')) $('seek').value = position;
+  $('play').dataset.state = player.starting ? 'starting' : player.playing ? 'playing' : 'paused';
+  $('play').setAttribute('aria-label', player.starting ? 'Cancel playback start' : player.playing ? 'Pause' : 'Play');
+  document.querySelectorAll('.playhead').forEach(p => p.style.left = `${player.duration ? position / player.duration * 100 : 0}%`);
+  requestAnimationFrame(animate);
+}

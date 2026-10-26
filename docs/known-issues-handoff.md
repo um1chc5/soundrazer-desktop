@@ -7,7 +7,7 @@ budget.
 ## 1. Setup screen reads the wrong folder → "Can't read C:\Program
    Files\pyproject.toml"
 
-**Root cause, confirmed:** [app/sound_razor/setup.py](../app/sound_razor/setup.py)
+**Root cause, confirmed:** [`_install_dir()` in setup_env.py](../app/sound_razor/setup_env.py)
 line 36:
 ```python
 def _install_dir() -> Path:
@@ -71,7 +71,7 @@ most useful next step would be asking them to run `pythonw.exe` with
 `py_compile`-level tracing, or — simpler — add a very early
 `try/except Exception: Path(os.environ['TEMP'], 'sr-crash.log').write_text(traceback.format_exc())`
 around the top of [app/ui_entrypoint.py](../app/ui_entrypoint.py)'s `main()`
-(or even around the module-level `import webview` / `from sound_razor import ui`
+(or even around the module-level `import webview` / `from sound_razor.webui import serve`
 lines), ship that as a diagnostic build, and have them run the `pythonw.exe`
 shortcut once more and check `%TEMP%\sr-crash.log` afterward. That would
 finally surface what's actually failing without needing a console.
@@ -95,13 +95,12 @@ finally surface what's actually failing without needing a console.
 User's report: after install, **both tabs (Separate / Library) are visible
 and usable immediately** — the one-time setup/consent screen (that's
 supposed to ask before downloading FFmpeg/PyTorch/etc., per
-[docs/first-run-setup-plan.md](first-run-setup-plan.md)) isn't actually
+[docs/specs/04-first-run-setup.md](specs/04-first-run-setup.md)) isn't actually
 gating anything, or isn't showing at all. Needs investigation into
-`app/sound_razor/web/index.html`'s `#view-setup` section and whatever
-app.js logic is supposed to route the user there first on a fresh install
-(look for how `state.setup` — seen referenced in app.js as
-`SETUP_STEPS`/`SETUP_STAGE_LABEL` constants from earlier in this session —
-decides which view shows first).
+`app/sound_razor/web/index.html`'s `#view-setup` section and the
+`webui/` + `web/js/` logic supposed to route the user there first on a fresh install
+(look for `state.setup` and setup-stage constants in `web/js/views/setup.js`
+and the navigation modules; these decide which view shows first).
 
 **Also requested (new, not yet built):** the setup screen should visually
 distinguish, per component, whether it's **already present** vs **needs
@@ -110,11 +109,13 @@ downloading** — icon/color coded (e.g. a checkmark + muted color for
 installing"), not just a flat list. This means the setup screen's data
 needs a per-item boolean (already-satisfied vs missing) that the backend
 already effectively computes (see `runtime_ok()`, the ffmpeg check, etc. in
-[app/sound_razor/setup.py](../app/sound_razor/setup.py) — bug #1 above is
+[`setup_env.py`](../app/sound_razor/setup_env.py) — bug #1 above is
 in that same file) — wire that per-item status through to the setup UI
 instead of just a flat requirements list.
 
 ## Context for whoever picks this up
+
+Paths updated after the package refactor; the historical bug descriptions below retain their original context.
 
 - Repo: https://github.com/um1chc5/soundrazer-desktop (public)
 - Releases so far: v1.0.0 through v1.0.3. v1.0.3 is the last one with a

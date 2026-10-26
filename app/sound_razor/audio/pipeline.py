@@ -13,7 +13,7 @@ from pathlib import Path
 from .sources import youtube_audio
 from .model_cache import create_separator
 from .output_files import validate_outputs
-from .tools import MISSING_FFMPEG, ensure_ffmpeg_on_path
+from ..tools import MISSING_FFMPEG, ensure_ffmpeg_on_path
 
 DEFAULT_MODEL = "htdemucs_6s.yaml"
 VOCAL_MODEL = "UVR_MDXNET_KARA_2.onnx"

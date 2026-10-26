@@ -17,7 +17,7 @@ User experience: double-click `SoundRazor-Setup.exe`, click Next a few times, wa
 
 ### 2. Native desktop window (pywebview)
 Wrap the existing web UI in the OS's built-in WebView (EdgeHTML on Windows). Reuses 100% of the existing frontend with minimal changes:
-- One import + a few lines in `ui.py` to open a native window instead of `webbrowser.open()`
+- The launcher opens the local UI served by `app/sound_razor/webui/server.py` in a native window instead of `webbrowser.open()`
 - No Electron/Chromium bundle (saves ~150 MB)
 - Feels like a real app: taskbar icon, window controls, no browser chrome
 
@@ -35,7 +35,9 @@ Wrap the existing web UI in the OS's built-in WebView (EdgeHTML on Windows). Reu
 ## Files to create
 - `installer/SoundRazor.iss` — Inno Setup script
 - `installer/bootstrap.ps1` — download + install logic
-- `sound_razor/ui.py` — add pywebview wrapper (optional, behind a flag)
+- `app/sound_razor/webui/server.py` — local HTTP/static server used by the pywebview launcher
+- `app/sound_razor/setup_env.py` — first-run dependency setup jobs
+- `app/sound_razor/web/js/` and `app/sound_razor/web/css/` — static ES-module frontend and stylesheets
 
 ## Deliverable
 `SoundRazor-Setup-x64.exe` — a ~5-10 MB bootstrap installer.
@@ -45,7 +47,7 @@ Total disk usage after install: ~600 MB (deps + models + app).
 ## Build flow (developer)
 ```sh
 # 1. (Optional) Build a frozen single-file exe with PyInstaller for faster first launch
-pyinstaller --onefile --windowed sound_razor/ui_entrypoint.py
+pyinstaller --onefile --windowed app/ui_entrypoint.py
 
 # 2. Compile the Inno Setup bootstrap installer
 iscc SoundRazor.iss

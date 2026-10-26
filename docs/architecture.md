@@ -7,36 +7,42 @@ User → CLI/UI → pipeline.separate() → FFmpeg normalize → audio-separator
 
 ## Module responsibilities
 
-### `pipeline.py`
+### `audio/pipeline.py`
 - `select_model()` — picks the right model based on requested stems
 - `normalize()` — FFmpeg: stereo 44.1kHz 16-bit PCM WAV
 - `output_directory()` — where to write results
 - `separate()` — main function: downloads model if needed, runs inference, saves stems
 - `combine_other()` — folds unselected stems into "Other" using FFmpeg amix filter
 
-### `model_cache.py`
+### `audio/model_cache.py`
 - `create_separator()` — instantiates `audio_separator.separator.Separator` with our settings
 - Manages model download URLs and SHA-256 checksums
 - Three model families: Demucs (`.yaml` + `.th`), MDX (`.onnx`), RoFormer (`.ckpt`)
 
-### `guitar_split.py`
+### `audio/guitar_split.py`
 - Loads vendored Mel-Band RoFormer directly with PyTorch
 - Processes 3-second windows with 50% overlap
 - Predicts lead guitar, subtracts from input to get rhythm
 - Uses 4 CPU threads
 
-### `ui.py`
+### `webui/server.py` and `webui/library.py`
 - HTTP server (stdlib `http.server`) on 127.0.0.1:8765
-- Serves static frontend from `web/`
+- Serves static frontend from `web/` using generic safe static serving
 - API endpoints for: listing projects, importing audio, starting separation, getting status, deleting projects, finding metadata
 - Spawns CLI as subprocess for actual separation
 
-### `metadata_lookup.py`
+### `projects/store.py`
+- Project folder discovery, description, and safe project operations
+
+### `setup_env.py`
+- First-run dependency detection and setup-stage jobs
+
+### `projects/metadata.py`
 - MusicBrainz API (rate-limited to 1 req/sec)
 - Cover Art Archive for album art
 - Returns title, artist, album, year, cover image
 
-### `sources.py`
+### `audio/sources.py`
 - yt-dlp wrapper for YouTube audio download
 - Extracts to `original.wav` in a new project folder
 
@@ -49,11 +55,12 @@ User → CLI/UI → pipeline.separate() → FFmpeg normalize → audio-separator
 | lead_rhythm_listra92 | lead_rhythm_listra92.ckpt | Split guitar into lead + rhythm | PyTorch (RoFormer) |
 
 ## Frontend (`web/`)
+- `web/js/` — vanilla ES modules, including project management, import, separation controls, and audio playback
+- `web/css/` — five stylesheets for the app and views
 - `index.html` — page structure
-- `app.js` — project management, import, separation controls
-- `player.js` — Web Audio API player with synchronized stem playback, mute/solo/volume, tempo control (via SoundTouchJS worklet)
-- `styles.css` — styling
-- `vendor/soundtouch/` — SoundTouchJS library (MPL-2.0) for pitch-preserving speed change
+- SoundTouchJS worklet — pitch-preserving speed change (MPL-2.0)
+
+The Python split into `audio/`, `projects/`, and `webui/` is complete, as is the web module/CSS split.
 
 ## Dependencies
 - `audio-separator[cpu]` — the main inference library (wraps Demucs + MDX)

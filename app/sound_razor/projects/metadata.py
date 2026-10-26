@@ -9,7 +9,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from .projects import metadata_fields
+from .store import metadata_fields
 
 _network_lock = threading.Lock()
 _last_request = 0.0

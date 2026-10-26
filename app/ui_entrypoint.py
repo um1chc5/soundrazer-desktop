@@ -13,9 +13,6 @@ except ImportError:
     webview = None
     FixPoint = None
 
-# Use the CLI to start the UI server
-from sound_razor import ui
-
 MIN_WIDTH, MIN_HEIGHT = 1100, 700
 
 
@@ -144,7 +141,7 @@ def main():
     port = 8765
 
     # Use the CLI to start the UI server
-    from sound_razor.ui import serve
+    from sound_razor.webui import serve
     from pathlib import Path
 
     # Created before the window exists and handed straight to serve(): it's only ever

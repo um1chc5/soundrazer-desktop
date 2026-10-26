@@ -1,0 +1,49 @@
+import {store} from './store.js';
+const $ = id => document.getElementById(id);
+const token = document.querySelector('meta[name="sound-razor-token"]').content;
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+let noticeTimer = null;
+function notice(message = '', kind = 'info') {
+  clearTimeout(noticeTimer);
+  $('notice').textContent = message; $('notice').hidden = !message; $('notice').dataset.kind = kind;
+  if (message) noticeTimer = setTimeout(() => { $('notice').hidden = true; }, kind === 'error' ? 9000 : 5000);
+}
+function time(seconds) {
+  seconds = Math.max(0, Math.floor(seconds || 0));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+function duration(seconds) {
+  seconds = Math.max(0, Math.round(seconds));
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60), s = seconds % 60;
+  return m < 60 ? `${m}m ${String(s).padStart(2, '0')}s` : `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+let clockSkew = 0;
+function setClockSkew(value) { clockSkew = value; }
+function serverNow() { return Date.now() / 1000 + clockSkew; }
+function sep() { return (store.state.root || '').includes('\\') ? '\\' : '/'; }
+function stem(name) { return name.replace(/\.[^.]+$/, ''); }
+async function api(path, data) {
+  const response = await fetch(path, {
+    method: data === undefined ? 'GET' : 'POST',
+    headers: {'X-sound-razor-Token': token, ...(data === undefined ? {} : {'Content-Type': 'application/json'})},
+    body: data === undefined ? undefined : JSON.stringify(data),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || `Request failed (${response.status})`);
+  return result;
+}
+function activeProject() { return store.state.projects.find(p => p.id === store.selected); }
+function jobRunning() { return store.state.job && ['running', 'cancelling'].includes(store.state.job.status); }
+function projectUrl(id) { return `/api/projects/${encodeURIComponent(id)}`; }
+function fields(prefix) {
+  const data = Object.fromEntries(['title', 'artist', 'album', 'year'].map(key => [key, $(`${prefix}-${key}`).value]));
+  if (store.lookupSelections[prefix]) data.lookup_token = store.lookupSelections[prefix];
+  return data;
+}
+export {$, token, el, notice, time, duration, serverNow, setClockSkew, sep, stem, api, activeProject, jobRunning, projectUrl, fields};
