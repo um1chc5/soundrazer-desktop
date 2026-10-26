@@ -19,6 +19,36 @@ from sound_razor import ui
 MIN_WIDTH, MIN_HEIGHT = 1100, 700
 
 
+def known_folder(guid: str, fallback: Path) -> Path:
+    """Ask Windows for a Known Folder's real path via the Shell API, rather than
+    assuming %USERPROFILE%\\Documents etc. — those are wrong (and still "exist" as
+    plain, writable, but *not the folder the user actually sees*) once OneDrive's
+    "Backup your folders" feature redirects Documents/Desktop into
+    %USERPROFILE%\\OneDrive\\..., which it does by default on many Windows setups."""
+    if os.name != "nt":
+        return fallback
+    import ctypes
+    from ctypes import wintypes
+
+    class GUID(ctypes.Structure):
+        _fields_ = [("Data1", wintypes.DWORD), ("Data2", wintypes.WORD), ("Data3", wintypes.WORD),
+                    ("Data4", ctypes.c_byte * 8)]
+
+    folder_id = GUID()
+    path_ptr = ctypes.c_wchar_p()
+    try:
+        if ctypes.windll.ole32.CLSIDFromString(guid, ctypes.byref(folder_id)) != 0:
+            return fallback
+        if ctypes.windll.shell32.SHGetKnownFolderPath(ctypes.byref(folder_id), 0, 0, ctypes.byref(path_ptr)) != 0:
+            return fallback
+        return Path(path_ptr.value)
+    except Exception:
+        return fallback
+    finally:
+        if path_ptr.value:
+            ctypes.windll.ole32.CoTaskMemFree(path_ptr)
+
+
 def writable_dirs():
     """Where this app keeps its own data when it may be installed somewhere read-only
     (Program Files needs admin rights to write to — a plain double-click shortcut never
@@ -27,11 +57,14 @@ def writable_dirs():
 
     Background data (config, the multi-hundred-MB model cache) goes under the standard
     per-user app-data folder; the default separated-song output folder goes somewhere
-    the user would actually look for it.
+    the user would actually look for it — the *real*, possibly OneDrive-redirected,
+    Documents folder, not a guessed %USERPROFILE%\\Documents that may silently diverge
+    from what Explorer actually shows the user as "Documents".
     """
     local_app_data = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
     app_data_dir = local_app_data / "SoundRazer Desktop"
-    documents = Path(os.environ.get("USERPROFILE") or Path.home()) / "Documents"
+    documents = known_folder("{FDD39AD0-238F-46AF-ADB4-6C85480369C7}",  # FOLDERID_Documents
+                              Path(os.environ.get("USERPROFILE") or Path.home()) / "Documents")
     return {
         "config": app_data_dir / "ui.json",
         "cache": app_data_dir / "models",

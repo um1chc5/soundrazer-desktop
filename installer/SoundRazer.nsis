@@ -74,15 +74,17 @@ Section "SoundRazer Desktop" SecMain
   File /r "embedded\runtime\*"
   SetOutPath "$INSTDIR"
 
-  ; Start Menu entry. Uses python.exe (a visible console) rather than pythonw.exe:
-  ; pythonw.exe silently failed to launch at all for at least one real install,
-  ; reproducibly, with nothing in the Application event log and no way for us to
-  ; see why — while python.exe worked immediately on the same machine. Trading the
-  ; console window for "actually opens" until the pythonw failure is understood.
+  ; Start Menu entry. Launches via launch.bat (app\launch.bat, copied in by the
+  ; File /r above) rather than runtime\python.exe or pythonw.exe directly: on a real
+  ; install, a shortcut launching python.exe straight (a fresh, attached console)
+  ; reliably crashed within a second of opening, silently, every time; the exact
+  ; same command with stdout/stderr redirected to a file instead — which is exactly
+  ; what launch.bat does — opened the app successfully, every time. Root cause not
+  ; understood; this is the configuration confirmed working on a real machine.
   ; File /r "..\app\*" copies app/'s CONTENTS into $INSTDIR directly (not into an
-  ; "$INSTDIR\app" subfolder), so ui_entrypoint.py lands at $INSTDIR's root.
+  ; "$INSTDIR\app" subfolder), so launch.bat/ui_entrypoint.py land at $INSTDIR's root.
   CreateDirectory "$SMPROGRAMS\${NAME}"
-  CreateShortCut "$SMPROGRAMS\${NAME}\${NAME}.lnk" "$INSTDIR\runtime\python.exe" "$INSTDIR\ui_entrypoint.py" "$INSTDIR\icon.ico"
+  CreateShortCut "$SMPROGRAMS\${NAME}\${NAME}.lnk" "$INSTDIR\launch.bat" "" "$INSTDIR\icon.ico"
   CreateShortCut "$SMPROGRAMS\${NAME}\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
@@ -100,7 +102,7 @@ Section "SoundRazer Desktop" SecMain
 SectionEnd
 
 Section "Desktop shortcut" SecDesktop
-  CreateShortCut "$DESKTOP\${NAME}.lnk" "$INSTDIR\runtime\python.exe" "$INSTDIR\ui_entrypoint.py" "$INSTDIR\icon.ico"
+  CreateShortCut "$DESKTOP\${NAME}.lnk" "$INSTDIR\launch.bat" "" "$INSTDIR\icon.ico"
 SectionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
@@ -116,6 +118,7 @@ Section "Uninstall"
   Delete "$INSTDIR\LICENSE"
   Delete "$INSTDIR\icon.ico"
   Delete "$INSTDIR\ui_entrypoint.py"
+  Delete "$INSTDIR\launch.bat"
   RMDir /r "$INSTDIR\sound_razor"
   RMDir /r "$INSTDIR\soundrazer_desktop.egg-info"
   RMDir /r "$INSTDIR\runtime"
