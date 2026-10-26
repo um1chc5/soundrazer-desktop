@@ -6,7 +6,7 @@ SoundRazer Desktop is a local desktop stem separator with a Python backend and v
 
 | # | Spec | Status | Summary / what remains |
 |---:|---|---|---|
-| 01 | [App specification](01-app.md) | Done | Describes current behavior and architecture, planned project fields, and the target layout updated for the module refactor. |
+| 01 | [App specification](01-app.md) | Done | Describes current behavior and architecture, planned project fields, and the current layout after the module refactor. |
 | 02 | [Pre-separation trim](02-pre-separation-trim.md) | Todo | Complete specification; backend and frontend trim behavior, offsets, and UI are not implemented. |
 | 03 | [Output formats](03-output-formats.md) | Todo | Complete specification; the export job, conversions, manifest, and UI are not implemented. Canonical stored stems remain 44.1 kHz stereo WAV. |
 | 04 | [First-run setup](04-first-run-setup.md) | Doing | In-app checklist, per-stage progress, optional YouTube toggle, and setup gating exist. Installer/bootstrap consent and the full “setup as the main UI” visual merge remain. |
