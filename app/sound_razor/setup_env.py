@@ -6,24 +6,49 @@ already uses for separation jobs — no new frontend plumbing.
 """
 
 import importlib.util
+import platform
 import shutil
+import stat
 import subprocess
 import sys
+import tarfile
 import tempfile
 import tomllib
 import zipfile
 from pathlib import Path
 from urllib.request import urlopen
 
-from .tools import ensure_ffmpeg_on_path, MISSING_FFMPEG
+from .tools import EXE, ensure_ffmpeg_on_path, MISSING_FFMPEG
 
-# Mirrors installer/bootstrap.ps1: ffmpeg.exe/ffprobe.exe land next to the app
-# folder (install root), where tools.py already looks for them.
-FFMPEG_URL = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+# Mirrors installer/bootstrap.ps1: ffmpeg/ffprobe land next to the app folder
+# (install root), where tools.py already looks for them. The Windows build is a
+# .zip of .exe files; Linux gets the johnvansickle static build (a .tar.xz) so the
+# app can bootstrap FFmpeg on its own there too instead of demanding a system
+# package — a distro-agnostic download beats "apt install ffmpeg, but only on
+# Debian" for an app that ships as a portable folder.
+FFMPEG_URL_WINDOWS = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+FFMPEG_URL_LINUX = "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"
 FFMPEG_SIZE_MB = 100
 SEPARATION_SIZE_MB = 1600
 YOUTUBE_SIZE_MB = 15
 RUNTIME_SIZE_MB = 50
+
+
+def ffmpeg_url() -> str:
+    """Which FFmpeg archive to download for this platform."""
+    if sys.platform.startswith("linux"):
+        return FFMPEG_URL_LINUX
+    return FFMPEG_URL_WINDOWS
+
+
+def _host_arch_ok() -> bool:
+    """The Linux static build is x86-64 only; arm64 has no equivalent download, so
+    setup must say so instead of fetching a binary that cannot exec."""
+    if not sys.platform.startswith("linux"):
+        return True
+    machine = platform.machine().lower()
+    return machine in {"x86_64", "amd64"}
+
 
 STAGE_ORDER = ("ffmpeg", "separation", "youtube")
 
@@ -79,7 +104,12 @@ def _binary_ok(path: Path | None, minimum: int) -> bool:
             head = stream.read(2)
     except OSError:
         return False
-    return head == b"MZ" if sys.platform == "win32" else bool(head)
+    if sys.platform == "win32":
+        return head == b"MZ"
+    # Non-Windows binaries (ELF/Mach-O) have no single fixed magic, but an
+    # interrupted install leaves the file zero-filled — the case this check exists
+    # to catch. `bool(head)` alone waved that through, since b"\0\0" is truthy.
+    return bool(head) and head != b"\0" * len(head)
 
 
 def torch_ok() -> bool:
@@ -190,15 +220,56 @@ def _cancelling(library) -> bool:
         return library.job is not None and library.job["status"] == "cancelling"
 
 
+def _extract_ffmpeg_zip(archive: Path, install: Path) -> None:
+    """Windows: the gyan.dev build nests the binaries under <root>/bin/."""
+    with zipfile.ZipFile(archive) as zip_file:
+        names = zip_file.namelist()
+        ffmpeg_name = next((n for n in names if n.lower().endswith("/bin/ffmpeg.exe")), None)
+        ffprobe_name = next((n for n in names if n.lower().endswith("/bin/ffprobe.exe")), None)
+        if not ffmpeg_name or not ffprobe_name:
+            raise RuntimeError("FFmpeg archive is missing ffmpeg.exe/ffprobe.exe.")
+        with zip_file.open(ffmpeg_name) as source, (install / "ffmpeg.exe").open("wb") as target:
+            shutil.copyfileobj(source, target)
+        with zip_file.open(ffprobe_name) as source, (install / "ffprobe.exe").open("wb") as target:
+            shutil.copyfileobj(source, target)
+
+
+def _extract_ffmpeg_tar(archive: Path, install: Path) -> None:
+    """Linux: the static build keeps ffmpeg/ffprobe at the archive root and the
+    binaries need the executable bit set explicitly — a plain extract() drops it,
+    which shows up later as a bare PermissionError from subprocess."""
+    wanted = {"ffmpeg", "ffprobe"}
+    found: set[str] = set()
+    with tarfile.open(archive, mode="r:xz") as tar_file:
+        for member in tar_file.getmembers():
+            name = Path(member.name).name
+            if name not in wanted or not member.isfile():
+                continue
+            source = tar_file.extractfile(member)
+            if source is None:
+                continue
+            target = install / name
+            with source, target.open("wb") as stream:
+                shutil.copyfileobj(source, stream)
+            target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            found.add(name)
+    if found != wanted:
+        missing = ", ".join(sorted(wanted - found)) or "ffmpeg/ffprobe"
+        raise RuntimeError(f"FFmpeg archive is missing {missing}.")
+
+
 def _install_ffmpeg(library, start_progress: int, band: int) -> int:
-    """Download the FFmpeg essentials zip and place ffmpeg.exe + ffprobe.exe
-    next to the app folder. Returns the progress reached."""
+    """Download FFmpeg and place ffmpeg + ffprobe next to the app folder. Returns
+    the progress reached."""
+    if not _host_arch_ok():
+        raise RuntimeError("Automatic FFmpeg setup is only available for x86-64 on Linux. "
+                           "Install FFmpeg with your package manager and reopen the app.")
     _tick(library, "download", "ffmpeg", start_progress)
-    _log(library, f"Downloading FFmpeg from {FFMPEG_URL}…")
+    _log(library, f"Downloading FFmpeg from {ffmpeg_url()}…")
     with tempfile.TemporaryDirectory(prefix="sound-razor-ffmpeg-") as temporary:
         work = Path(temporary)
-        archive = work / "ffmpeg.zip"
-        with urlopen(FFMPEG_URL, timeout=60) as response, archive.open("wb") as stream:
+        archive = work / "ffmpeg.tar.xz" if sys.platform.startswith("linux") else work / "ffmpeg.zip"
+        with urlopen(ffmpeg_url(), timeout=60) as response, archive.open("wb") as stream:
             length = response.headers.get("Content-Length")
             expected = int(length) if length is not None else None
             received = 0
@@ -218,16 +289,10 @@ def _install_ffmpeg(library, start_progress: int, band: int) -> int:
         if expected is not None and received != expected:
             raise RuntimeError("Incomplete FFmpeg download. Retry setup.")
         install = _install_dir()
-        with zipfile.ZipFile(archive) as zip_file:
-            names = zip_file.namelist()
-            ffmpeg_name = next((n for n in names if n.lower().endswith("/bin/ffmpeg.exe")), None)
-            ffprobe_name = next((n for n in names if n.lower().endswith("/bin/ffprobe.exe")), None)
-            if not ffmpeg_name or not ffprobe_name:
-                raise RuntimeError("FFmpeg archive is missing ffmpeg.exe/ffprobe.exe.")
-            with zip_file.open(ffmpeg_name) as source, (install / "ffmpeg.exe").open("wb") as target:
-                shutil.copyfileobj(source, target)
-            with zip_file.open(ffprobe_name) as source, (install / "ffprobe.exe").open("wb") as target:
-                shutil.copyfileobj(source, target)
+        if sys.platform.startswith("linux"):
+            _extract_ffmpeg_tar(archive, install)
+        else:
+            _extract_ffmpeg_zip(archive, install)
     if not ensure_ffmpeg_on_path():
         raise RuntimeError("FFmpeg was installed but could not be added to PATH.")
     _log(library, "FFmpeg installed.")

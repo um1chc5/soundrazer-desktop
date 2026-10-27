@@ -1,4 +1,7 @@
+import io
+import stat
 import sys
+import tarfile
 import tempfile
 import threading
 from types import SimpleNamespace
@@ -40,6 +43,58 @@ class SetupHealthTests(unittest.TestCase):
                 self.assertTrue(setup_env.torch_ok())
                 (root / "lib" / "torch_python.dll").write_bytes(b"\0" * (1024 * 1024))
                 self.assertFalse(setup_env.torch_ok())
+
+    def test_ffmpeg_url_is_platform_specific(self):
+        with patch.object(setup_env.sys, "platform", "linux"):
+            self.assertTrue(setup_env.ffmpeg_url().endswith(".tar.xz"))
+        with patch.object(setup_env.sys, "platform", "win32"):
+            self.assertTrue(setup_env.ffmpeg_url().endswith(".zip"))
+
+    def test_host_arch_ok_rejects_arm_linux(self):
+        with patch.object(setup_env.sys, "platform", "linux"), \
+                patch.object(setup_env.platform, "machine", return_value="aarch64"):
+            self.assertFalse(setup_env._host_arch_ok())
+        with patch.object(setup_env.sys, "platform", "linux"), \
+                patch.object(setup_env.platform, "machine", return_value="x86_64"):
+            self.assertTrue(setup_env._host_arch_ok())
+        # Non-Linux platforms are always fine — the guard is about the static build.
+        with patch.object(setup_env.sys, "platform", "win32"), \
+                patch.object(setup_env.platform, "machine", return_value="ARM64"):
+            self.assertTrue(setup_env._host_arch_ok())
+
+    @staticmethod
+    def _tarball(path, names):
+        with tarfile.open(path, "w:xz") as archive:
+            for name in names:
+                payload = b"\x7fELF fake"
+                info = tarfile.TarInfo(f"ffmpeg-7.0.2-amd64-static/{name}")
+                info.size = len(payload)
+                info.mode = 0o644
+                archive.addfile(info, io.BytesIO(payload))
+
+    def test_extract_ffmpeg_tar_sets_executable_bit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary)
+            archive = work / "ffmpeg.tar.xz"
+            self._tarball(archive, ["ffmpeg", "ffprobe"])
+            install = work / "install"
+            install.mkdir()
+            setup_env._extract_ffmpeg_tar(archive, install)
+            for name in ("ffmpeg", "ffprobe"):
+                target = install / name
+                self.assertTrue(target.is_file())
+                self.assertTrue(target.stat().st_mode & stat.S_IXUSR)
+
+    def test_extract_ffmpeg_tar_rejects_incomplete_archive(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary)
+            archive = work / "ffmpeg.tar.xz"
+            self._tarball(archive, ["ffmpeg"])  # ffprobe missing
+            install = work / "install"
+            install.mkdir()
+            with self.assertRaises(RuntimeError) as caught:
+                setup_env._extract_ffmpeg_tar(archive, install)
+            self.assertIn("ffprobe", str(caught.exception))
 
     def test_pip_repair_falls_back_when_record_is_unreadable(self):
         class FakeProcess:

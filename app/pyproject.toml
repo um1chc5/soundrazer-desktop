@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "soundrazer-desktop"
+version = "1.1.1"
+description = "Standalone desktop app for Sound Razor - AI audio stem separation with enhanced UI"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "SoundRazer Team"},
+]
+keywords = ["audio", "separation", "stems", "demucs", "music", "desktop"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Multimedia :: Sound/Audio",
+]
+dependencies = [
+    "pywebview>=5.0",
+]
+
+[project.optional-dependencies]
+# These used to point at a nonexistent external "sound-razor[...]" package (a packaging bug),
+# so `.[separation]` could never actually be installed. Declared directly here instead.
+separation = [
+    "audio-separator>=0.24",
+    "onnxruntime>=1.17",
+    "torch>=2.1",
+    "audioread>=3.0",
+]
+guitars = [
+    "torch>=2.1",
+    "beartype>=0.18",
+    "librosa>=0.10",
+    "soundfile>=0.12",
+    "numpy>=1.26",
+    "audioread>=3.0",
+]
+youtube = [
+    "yt-dlp>=2024.1.1",
+]
+full = [
+    "soundrazer-desktop[separation,guitars,youtube]",
+]
+
+[project.scripts]
+soundrazer = "app.ui_entrypoint:main"
+
+[tool.setuptools.packages.find]
+where = ["app"]
+include = ["sound_razor*", "app*"]
+
+[tool.setuptools.package-data]
+"sound_razor" = ["web/*", "web/**/*", "vendor/**/*"]
