@@ -116,28 +116,58 @@
   footer a { color: var(--muted); }
 
   code { background: var(--bg-alt); padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+
+  .lang-toggle {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 10;
+    display: flex;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .lang-toggle button {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .lang-toggle button.active { background: var(--accent); color: #1a1105; }
 </style>
 </head>
 <body>
+
+<div class="lang-toggle">
+  <button type="button" data-lang="en">EN</button>
+  <button type="button" data-lang="vi">VI</button>
+</div>
 
 <header class="hero">
   <div class="wrap">
     <img src="assets/icon-256.png" alt="SoundRazer Desktop icon" class="logo" />
     <h1>SoundRazer Desktop</h1>
-    <p class="tagline">Split any song into vocals, drums, bass, guitar, piano and more — powered by local AI, running entirely on your PC.</p>
+    <p class="tagline" data-i18n="hero.tagline">Split any song into vocals, drums, bass, guitar, piano and more — powered by local AI, running entirely on your PC.</p>
     <a class="btn" href="https://github.com/um1chc5/soundrazer-desktop/releases/latest/download/SoundRazer-Setup-x64.exe">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.59l3.3-3.3 1.4 1.42L12 17.4l-4.7-5.69 1.4-1.42 3.3 3.3V3h0zM5 19h14v2H5z"/></svg>
-      Download for Windows
+      <span data-i18n="hero.btn">Download for Windows</span>
     </a>
-    <div class="sub-note">Free &amp; open source · Windows 10/11 (64-bit) · <a href="https://github.com/um1chc5/soundrazer-desktop">View on GitHub</a></div>
-    <div class="credit">By <a href="https://github.com/um1chc5" class="author">um1chc5</a> · built on <a href="https://github.com/pedromtcosta/sound-razor">Sound Razor</a> by <a href="https://github.com/pedromtcosta" class="author">pedromtcosta</a></div>
+    <div class="sub-note" data-i18n="hero.subnote">Free &amp; open source · Windows 10/11 (64-bit) · <a href="https://github.com/um1chc5/soundrazer-desktop">View on GitHub</a></div>
+    <div class="credit" data-i18n="hero.credit">By <a href="https://github.com/um1chc5" class="author">um1chc5</a> · built on <a href="https://github.com/pedromtcosta/sound-razor">Sound Razor</a> by <a href="https://github.com/pedromtcosta" class="author">pedromtcosta</a></div>
   </div>
 </header>
 
 <section>
   <div class="wrap">
-    <h2>What it does</h2>
-    <p class="section-lead">
+    <h2 data-i18n="about.h2">What it does</h2>
+    <p class="section-lead" data-i18n="about.lead">
       SoundRazer Desktop packages <a href="https://github.com/pedromtcosta/sound-razor">Sound Razor</a> into a native Windows
       app with a polished UI. Drop in a track (or paste a YouTube link) and it separates the mix into individual
       instrument stems using AI models such as Demucs, MDX-Net, and RoFormer — all processed locally, nothing uploaded.
@@ -145,33 +175,33 @@
     <div class="grid">
       <div class="card">
         <span class="emoji">🖥️</span>
-        <h3>Native desktop app</h3>
-        <p>Runs in its own window, no browser required, with a modern, redesigned interface.</p>
+        <h3 data-i18n="card.1.h3">Native desktop app</h3>
+        <p data-i18n="card.1.p">Runs in its own window, no browser required, with a modern, redesigned interface.</p>
       </div>
       <div class="card">
         <span class="emoji">🔒</span>
-        <h3>100% local processing</h3>
-        <p>All AI models run on your computer. No cloud uploads, no accounts, no API keys.</p>
+        <h3 data-i18n="card.2.h3">100% local processing</h3>
+        <p data-i18n="card.2.p">All AI models run on your computer. No cloud uploads, no accounts, no API keys.</p>
       </div>
       <div class="card">
         <span class="emoji">🎸</span>
-        <h3>Guitar splitting</h3>
-        <p>Go further than vocals/drums/bass — separate lead and rhythm guitar parts too.</p>
+        <h3 data-i18n="card.3.h3">Guitar splitting</h3>
+        <p data-i18n="card.3.p">Go further than vocals/drums/bass — separate lead and rhythm guitar parts too.</p>
       </div>
       <div class="card">
         <span class="emoji">📺</span>
-        <h3>YouTube import</h3>
-        <p>Paste a YouTube link to download and separate audio directly, no extra tools needed.</p>
+        <h3 data-i18n="card.4.h3">YouTube import</h3>
+        <p data-i18n="card.4.p">Paste a YouTube link to download and separate audio directly, no extra tools needed.</p>
       </div>
       <div class="card">
         <span class="emoji">🎚️</span>
-        <h3>Real-time mixer</h3>
-        <p>Volume, mute, and solo each stem independently while you play back the track.</p>
+        <h3 data-i18n="card.5.h3">Real-time mixer</h3>
+        <p data-i18n="card.5.p">Volume, mute, and solo each stem independently while you play back the track.</p>
       </div>
       <div class="card">
         <span class="emoji">🎵</span>
-        <h3>Format support</h3>
-        <p>WAV, MP3, FLAC, M4A, OGG, AAC and more, plus project management for your separated tracks.</p>
+        <h3 data-i18n="card.6.h3">Format support</h3>
+        <p data-i18n="card.6.p">WAV, MP3, FLAC, M4A, OGG, AAC and more, plus project management for your separated tracks.</p>
       </div>
     </div>
   </div>
@@ -179,28 +209,28 @@
 
 <section>
   <div class="wrap">
-    <h2>Getting started</h2>
-    <p class="section-lead">The installer is tiny and works offline. First launch asks you to confirm a one-time download of the rest.</p>
+    <h2 data-i18n="start.h2">Getting started</h2>
+    <p class="section-lead" data-i18n="start.lead">The installer is tiny and works offline. First launch asks you to confirm a one-time download of the rest.</p>
     <div class="steps">
       <div class="step">
         <div class="num">1</div>
         <div>
-          <strong>Download &amp; run the installer.</strong>
-          <p>Installs to Program Files by default. Windows will prompt for administrator rights; you choose whether to add a desktop icon.</p>
+          <strong data-i18n="step.1.strong">Download &amp; run the installer.</strong>
+          <p data-i18n="step.1.p">Installs to Program Files by default. Windows will prompt for administrator rights; you choose whether to add a desktop icon.</p>
         </div>
       </div>
       <div class="step">
         <div class="num">2</div>
         <div>
-          <strong>Approve the one-time setup.</strong>
-          <p>On first launch the app window opens immediately and asks you to consent to downloading FFmpeg and the PyTorch/audio-separation stack (~1.6&nbsp;GB total).</p>
+          <strong data-i18n="step.2.strong">Approve the one-time setup.</strong>
+          <p data-i18n="step.2.p">On first launch the app window opens immediately and asks you to consent to downloading FFmpeg and the PyTorch/audio-separation stack (~1.6&nbsp;GB total).</p>
         </div>
       </div>
       <div class="step">
         <div class="num">3</div>
         <div>
-          <strong>Import a track and separate.</strong>
-          <p>AI models (~500&nbsp;MB) download automatically on your first separation. After that, everything runs offline.</p>
+          <strong data-i18n="step.3.strong">Import a track and separate.</strong>
+          <p data-i18n="step.3.p">AI models (~500&nbsp;MB) download automatically on your first separation. After that, everything runs offline.</p>
         </div>
       </div>
     </div>
@@ -209,14 +239,14 @@
 
 <section>
   <div class="wrap">
-    <h2>System requirements</h2>
+    <h2 data-i18n="reqs.h2">System requirements</h2>
     <div class="reqs">
       <ul>
-        <li><strong>OS:</strong> Windows 10/11 (64-bit)</li>
-        <li><strong>RAM:</strong> 8&nbsp;GB minimum, 16&nbsp;GB recommended</li>
-        <li><strong>Storage:</strong> ~10&nbsp;GB free space (for dependencies and models)</li>
-        <li><strong>CPU:</strong> Modern 64-bit processor (4+ cores recommended)</li>
-        <li><strong>GPU:</strong> Optional — CPU works fine</li>
+        <li data-i18n="reqs.os"><strong>OS:</strong> Windows 10/11 (64-bit)</li>
+        <li data-i18n="reqs.ram"><strong>RAM:</strong> 8&nbsp;GB minimum, 16&nbsp;GB recommended</li>
+        <li data-i18n="reqs.storage"><strong>Storage:</strong> ~10&nbsp;GB free space (for dependencies and models)</li>
+        <li data-i18n="reqs.cpu"><strong>CPU:</strong> Modern 64-bit processor (4+ cores recommended)</li>
+        <li data-i18n="reqs.gpu"><strong>GPU:</strong> Optional — CPU works fine</li>
       </ul>
     </div>
   </div>
@@ -224,10 +254,80 @@
 
 <footer>
   <div class="wrap">
-    <p>MIT licensed. Made by <a href="https://github.com/um1chc5">um1chc5</a>, built on <a href="https://github.com/pedromtcosta/sound-razor">Sound Razor</a> by pedromtcosta.</p>
-    <p><a href="https://github.com/um1chc5/soundrazer-desktop">Source on GitHub</a> · <a href="https://github.com/um1chc5/soundrazer-desktop/releases">All releases</a> · <a href="https://github.com/um1chc5/soundrazer-desktop/issues">Report an issue</a></p>
+    <p data-i18n="footer.p1">MIT licensed. Made by <a href="https://github.com/um1chc5">um1chc5</a>, built on <a href="https://github.com/pedromtcosta/sound-razor">Sound Razor</a> by pedromtcosta.</p>
+    <p data-i18n="footer.p2"><a href="https://github.com/um1chc5/soundrazer-desktop">Source on GitHub</a> · <a href="https://github.com/um1chc5/soundrazer-desktop/releases">All releases</a> · <a href="https://github.com/um1chc5/soundrazer-desktop/issues">Report an issue</a></p>
   </div>
 </footer>
+
+<script>
+(function () {
+  var TRANSLATIONS = {
+    vi: {
+      "hero.tagline": "Tách mọi bài hát thành giọng hát, trống, bass, guitar, piano và hơn thế nữa — bằng AI chạy hoàn toàn trên máy tính của bạn.",
+      "hero.btn": "Tải cho Windows",
+      "hero.subnote": "Miễn phí &amp; mã nguồn mở · Windows 10/11 (64-bit) · <a href=\"https://github.com/um1chc5/soundrazer-desktop\">Xem trên GitHub</a>",
+      "hero.credit": "Bởi <a href=\"https://github.com/um1chc5\" class=\"author\">um1chc5</a> · xây dựng trên <a href=\"https://github.com/pedromtcosta/sound-razor\">Sound Razor</a> của <a href=\"https://github.com/pedromtcosta\" class=\"author\">pedromtcosta</a>",
+      "about.h2": "Ứng dụng này làm gì",
+      "about.lead": "SoundRazer Desktop đóng gói <a href=\"https://github.com/pedromtcosta/sound-razor\">Sound Razor</a> thành một ứng dụng Windows gốc với giao diện hiện đại. Thả một bản nhạc vào (hoặc dán link YouTube) và nó sẽ tách bản mix thành từng track nhạc cụ riêng biệt bằng các mô hình AI như Demucs, MDX-Net và RoFormer — xử lý hoàn toàn cục bộ, không tải lên đâu cả.",
+      "card.1.h3": "Ứng dụng desktop gốc",
+      "card.1.p": "Chạy trong cửa sổ riêng, không cần trình duyệt, với giao diện hiện đại được thiết kế lại.",
+      "card.2.h3": "Xử lý 100% cục bộ",
+      "card.2.p": "Mọi mô hình AI đều chạy trên máy tính của bạn. Không tải lên cloud, không cần tài khoản, không cần API key.",
+      "card.3.h3": "Tách giọng guitar",
+      "card.3.p": "Không chỉ vocals/trống/bass — còn tách được guitar chính (lead) và guitar đệm (rhythm).",
+      "card.4.h3": "Nhập từ YouTube",
+      "card.4.p": "Dán link YouTube để tải và tách âm thanh trực tiếp, không cần công cụ khác.",
+      "card.5.h3": "Mixer thời gian thực",
+      "card.5.p": "Điều chỉnh âm lượng, tắt tiếng (mute), solo từng track độc lập khi phát lại.",
+      "card.6.h3": "Hỗ trợ nhiều định dạng",
+      "card.6.p": "WAV, MP3, FLAC, M4A, OGG, AAC và nhiều hơn nữa, cùng quản lý dự án cho các track đã tách.",
+      "start.h2": "Bắt đầu sử dụng",
+      "start.lead": "Bộ cài đặt rất nhẹ và hoạt động offline. Lần khởi chạy đầu tiên sẽ hỏi bạn xác nhận tải phần còn lại.",
+      "step.1.strong": "Tải &amp; chạy bộ cài đặt.",
+      "step.1.p": "Mặc định cài vào Program Files. Windows sẽ hỏi quyền quản trị viên; bạn có thể chọn thêm biểu tượng ngoài màn hình hay không.",
+      "step.2.strong": "Xác nhận thiết lập lần đầu.",
+      "step.2.p": "Ở lần mở đầu tiên, cửa sổ ứng dụng hiện ra ngay và yêu cầu bạn đồng ý tải FFmpeg cùng bộ PyTorch/tách âm thanh (~1.6&nbsp;GB tổng cộng).",
+      "step.3.strong": "Nhập một bản nhạc và tách.",
+      "step.3.p": "Các mô hình AI (~500&nbsp;MB) sẽ tự động tải về khi bạn tách lần đầu tiên. Sau đó mọi thứ chạy hoàn toàn offline.",
+      "reqs.h2": "Yêu cầu hệ thống",
+      "reqs.os": "<strong>Hệ điều hành:</strong> Windows 10/11 (64-bit)",
+      "reqs.ram": "<strong>RAM:</strong> Tối thiểu 8&nbsp;GB, khuyến nghị 16&nbsp;GB",
+      "reqs.storage": "<strong>Dung lượng:</strong> ~10&nbsp;GB trống (cho dependencies và models)",
+      "reqs.cpu": "<strong>CPU:</strong> Bộ xử lý 64-bit hiện đại (khuyến nghị 4+ nhân)",
+      "reqs.gpu": "<strong>GPU:</strong> Tùy chọn — CPU vẫn chạy tốt",
+      "footer.p1": "Giấy phép MIT. Thực hiện bởi <a href=\"https://github.com/um1chc5\">um1chc5</a>, xây dựng trên <a href=\"https://github.com/pedromtcosta/sound-razor\">Sound Razor</a> của pedromtcosta.",
+      "footer.p2": "<a href=\"https://github.com/um1chc5/soundrazer-desktop\">Mã nguồn trên GitHub</a> · <a href=\"https://github.com/um1chc5/soundrazer-desktop/releases\">Tất cả bản phát hành</a> · <a href=\"https://github.com/um1chc5/soundrazer-desktop/issues\">Báo lỗi</a>"
+    }
+  };
+
+  var original = {};
+  document.querySelectorAll("[data-i18n]").forEach(function (el) {
+    original[el.getAttribute("data-i18n")] = el.innerHTML;
+  });
+
+  function applyLang(lang) {
+    document.documentElement.lang = lang;
+    document.querySelectorAll("[data-i18n]").forEach(function (el) {
+      var key = el.getAttribute("data-i18n");
+      el.innerHTML = lang === "vi" ? (TRANSLATIONS.vi[key] || original[key]) : original[key];
+    });
+    document.querySelectorAll(".lang-toggle button").forEach(function (btn) {
+      btn.classList.toggle("active", btn.getAttribute("data-lang") === lang);
+    });
+    localStorage.setItem("srLang", lang);
+  }
+
+  document.querySelectorAll(".lang-toggle button").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      applyLang(btn.getAttribute("data-lang"));
+    });
+  });
+
+  var saved = localStorage.getItem("srLang");
+  var initial = saved || (navigator.language && navigator.language.toLowerCase().indexOf("vi") === 0 ? "vi" : "en");
+  applyLang(initial);
+})();
+</script>
 
 </body>
 </html>
