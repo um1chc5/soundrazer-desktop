@@ -8,8 +8,8 @@ virtual environment and a desktop entry, the same way the Windows
 ## Quick install
 
 ```bash
-git clone https://github.com/um1chc5/soundrazer-desktop.git
-cd soundrazer-desktop
+git clone https://github.com/um1chc5/unweave.git
+cd unweave
 ./installer/install-linux.sh
 ```
 

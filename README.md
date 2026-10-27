@@ -1,6 +1,6 @@
 # Unweave
 
-[![Download for Windows](https://img.shields.io/github/v/release/um1chc5/soundrazer-desktop?label=Download%20for%20Windows&style=for-the-badge&color=ff8a3d)](https://github.com/um1chc5/soundrazer-desktop/releases/latest/download/Unweave-Setup-x64.exe)
+[![Download for Windows](https://img.shields.io/github/v/release/um1chc5/unweave?label=Download%20for%20Windows&style=for-the-badge&color=ff8a3d)](https://github.com/um1chc5/unweave/releases/latest/download/Unweave-Setup-x64.exe)
 
 A desktop app that unweaves songs into their stems with local AI. Based on the excellent [Sound Razor](https://github.com/pedromtcosta/sound-razor) by [pedromtcosta](https://github.com/pedromtcosta).
 
@@ -27,7 +27,7 @@ Unweave packages Sound Razor into a native Windows application with an enhanced,
 
 ### For Users (Recommended)
 
-**[Download Unweave-Setup-x64.exe](https://github.com/um1chc5/soundrazer-desktop/releases/latest/download/Unweave-Setup-x64.exe)** (latest release) and run it. The installer is tiny and works offline:
+**[Download Unweave-Setup-x64.exe](https://github.com/um1chc5/unweave/releases/latest/download/Unweave-Setup-x64.exe)** (latest release) and run it. The installer is tiny and works offline:
 
 - Installs to Program Files (default: `C:\Program Files\Unweave`) — requires administrator rights, so Windows will prompt for them
 - Creates a Start Menu entry and registers an uninstaller; you choose whether to also add a desktop icon
@@ -38,7 +38,7 @@ On first launch the app window opens immediately and shows a one-time setup scre
 
 ```bash
 # Clone or copy this project
-cd soundrazer-desktop
+cd unweave
 
 # Create virtual environment
 uv venv --python 3.11 .venv
@@ -55,8 +55,8 @@ uv pip install --python .venv/Scripts/python.exe -e ".[full]"
 Unweave also runs on Linux (x86-64). Install it with the bundled script:
 
 ```bash
-git clone https://github.com/um1chc5/soundrazer-desktop.git
-cd soundrazer-desktop
+git clone https://github.com/um1chc5/unweave.git
+cd unweave
 ./installer/install-linux.sh
 unweave
 ```

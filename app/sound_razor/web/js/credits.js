@@ -23,7 +23,7 @@ const CREDITS = [
     ['MusicBrainz & Cover Art Archive', 'MetaBrainz Foundation', 'CC0 / various', 'https://musicbrainz.org'],
   ]],
 ];
-const README_CREDITS = 'https://github.com/um1chc5/soundrazer-desktop#credits';
+const README_CREDITS = 'https://github.com/um1chc5/unweave#credits';
 
 function link(href, text, className = '') {
   const a = el('a', className, text); a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer';

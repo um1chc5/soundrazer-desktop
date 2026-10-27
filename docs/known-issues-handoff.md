@@ -117,7 +117,7 @@ instead of just a flat requirements list.
 
 Paths updated after the package refactor; the historical bug descriptions below retain their original context.
 
-- Repo: https://github.com/um1chc5/soundrazer-desktop (public)
+- Repo: https://github.com/um1chc5/unweave (public)
 - Releases so far: v1.0.0 through v1.0.3. v1.0.3 is the last one with a
   working installer *location* but still has bug #1 and #2 above — don't
   point the user back at v1.0.3 as "the fix," it isn't.
