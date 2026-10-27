@@ -18,15 +18,60 @@ def embedded_runtime() -> bool:
     return any(Path(sys.executable).resolve().parent.glob("python*._pth"))
 
 
+APP_NAME = "Unweave"
+LEGACY_APP_NAME = "SoundRazer Desktop"  # the app's name up to 1.2.2
+
+
+def app_version() -> str:
+    """The version in pyproject.toml, which sits next to sound_razor/ in a checkout's app/
+    folder and at the install root (the installer copies the repo root's one there)."""
+    import tomllib
+    try:
+        with open(Path(__file__).resolve().parents[1] / "pyproject.toml", "rb") as stream:
+            return tomllib.load(stream)["project"]["version"]
+    except (OSError, KeyError, ValueError):
+        return ""
+
+
+def _local_app_data() -> Path:
+    return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+
+
 def app_data_dir() -> Path:
-    """Per-user folder for config, models and setup downloads (mirrors ui_entrypoint.py)."""
-    return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "SoundRazer Desktop"
+    """Per-user folder for config, models and setup downloads (ui_entrypoint.py uses it too)."""
+    return _local_app_data() / APP_NAME
+
+
+def migrate_legacy_data_dir() -> None:
+    """Carry a pre-rename install's data over (setup's ~1.6 GB of packages, models,
+    settings) by renaming the folder, so nothing is downloaded again. The installer
+    does the same before removing the old version; this covers anything it missed."""
+    legacy, current = _local_app_data() / LEGACY_APP_NAME, app_data_dir()
+    if legacy.is_dir() and not current.exists():
+        try:
+            legacy.rename(current)
+        except OSError:
+            pass  # in use by an old copy still running; the next launch retries
 
 
 def packages_prefix() -> Path:
-    """pip --prefix for setup's packages on the embedded runtime. installer/soundrazer.pth
-    puts its Lib/site-packages on sys.path; keep the two in step."""
+    """pip --prefix for setup's packages on the embedded runtime; prepare_embedded_runtime()
+    puts its Lib/site-packages on sys.path."""
     return app_data_dir() / "packages"
+
+
+def prepare_embedded_runtime() -> None:
+    """Run at interpreter start on the embedded runtime (installer/unweave.pth): keep the
+    shared per-user site-packages out and put setup's own package folder on sys.path."""
+    import site
+    user_site = site.getusersitepackages()
+    if user_site in sys.path:
+        sys.path.remove(user_site)
+    site.ENABLE_USER_SITE = False
+    migrate_legacy_data_dir()
+    packages = packages_prefix() / "Lib" / "site-packages"
+    packages.mkdir(parents=True, exist_ok=True)  # on sys.path now, so setup's installs import at once
+    site.addsitedir(str(packages))
 
 
 def ffmpeg_dir() -> Path:
@@ -67,7 +112,7 @@ def ensure_ffmpeg_on_path() -> bool:
 
 
 MISSING_FFMPEG = ("FFmpeg was not found. Install it (for example: winget install Gyan.FFmpeg) "
-                  "or put ffmpeg.exe and ffprobe.exe in the SoundRazer folder, then restart the app.")
+                  "or put ffmpeg.exe and ffprobe.exe in the Unweave folder, then restart the app.")
 
 
 def cpu_threads() -> int:

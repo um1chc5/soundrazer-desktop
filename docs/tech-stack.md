@@ -14,7 +14,7 @@
 | YouTube | yt-dlp | Industry standard, handles JS challenges |
 | Metadata | MusicBrainz API + Cover Art Archive | Free, open music database |
 
-## Desktop packaging (aloso/soundrazer-desktop/)
+## Desktop packaging (aloso/unweave/)
 | Layer | Technology | Why |
 |---|---|---|
 | Installer | Inno Setup 7 | Free, mature, creates proper Windows installers |

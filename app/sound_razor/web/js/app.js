@@ -6,6 +6,7 @@ import './transport.js';
 import './dialogs.js';
 import './folders.js';
 import './lookup.js';
+import './credits.js';
 import {nav} from './store.js';
 import {queueBusy, notice} from './core.js';
 import {animate} from './audio.js';

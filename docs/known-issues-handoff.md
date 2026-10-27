@@ -58,7 +58,7 @@ console/no stdio) fails on this real install in a way that:
   even a crash dialog, by design).
 
 **Mitigation already applied in code (not yet rebuilt/released):**
-[installer/SoundRazer.nsis](../installer/SoundRazer.nsis) — changed both
+[installer/Unweave.nsis](../installer/Unweave.nsis) — changed both
 `CreateShortCut` lines (Start Menu is already changed; **the Desktop
 shortcut section was NOT yet updated to match — do that too**) from
 `runtime\pythonw.exe` to `runtime\python.exe`, trading a visible console
@@ -79,7 +79,7 @@ finally surface what's actually failing without needing a console.
 **Action for this task:**
 1. Finish the `python.exe` swap for the Desktop shortcut section too
    (currently only Start Menu was changed).
-2. Rebuild (`cd installer && makensis SoundRazer.nsis`).
+2. Rebuild (`cd installer && makensis Unweave.nsis`).
 3. **Actually test on a real Program Files install** (this session
    couldn't fully verify — no admin rights in that shell). Install for
    real, click the Start Menu icon, confirm a window (with console behind
@@ -121,7 +121,7 @@ Paths updated after the package refactor; the historical bug descriptions below 
 - Releases so far: v1.0.0 through v1.0.3. v1.0.3 is the last one with a
   working installer *location* but still has bug #1 and #2 above — don't
   point the user back at v1.0.3 as "the fix," it isn't.
-- Installer is NSIS ([installer/SoundRazer.nsis](../installer/SoundRazer.nsis)),
+- Installer is NSIS ([installer/Unweave.nsis](../installer/Unweave.nsis)),
   installs to Program Files (admin-elevated), has an opt-in desktop-icon
   page. Embedded Python runtime is prebuilt at
   `installer/embedded/runtime/` (gitignored — rebuild steps are in the
@@ -130,5 +130,5 @@ Paths updated after the package refactor; the historical bug descriptions below 
   session for a *different* bug: it used to write config/models/output to
   paths relative to its own folder, which broke under Program Files
   (no write access without elevation). That's fixed — config/cache now go
-  to `%LocalAppData%\SoundRazer Desktop`, default output to
-  `Documents\SoundRazer Desktop`. Don't revert that.
+  to `%LocalAppData%\Unweave`, default output to
+  `Documents\Unweave`. Don't revert that.

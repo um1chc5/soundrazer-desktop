@@ -1,4 +1,4 @@
-# 01 — SoundRazer Desktop application specification
+# 01 — Unweave application specification
 
 Status: Done
 
@@ -6,7 +6,7 @@ What this covers: the current product, its behavior and architecture, plus the p
 
 ## Product
 
-SoundRazer Desktop is a local desktop stem separator. A Python backend exposes a local HTTP API and a vanilla ES-module web UI runs in a pywebview desktop window. Users import audio, separate it into stems, organize projects, and play or mix the results. The app requires no account and sends no telemetry; audio and projects stay on the user's machine. Optional metadata lookup contacts MusicBrainz/Cover Art Archive, and optional YouTube import downloads the selected audio source.
+Unweave is a local desktop stem separator. A Python backend exposes a local HTTP API and a vanilla ES-module web UI runs in a pywebview desktop window. Users import audio, separate it into stems, organize projects, and play or mix the results. The app requires no account and sends no telemetry; audio and projects stay on the user's machine. Optional metadata lookup contacts MusicBrainz/Cover Art Archive, and optional YouTube import downloads the selected audio source.
 
 ### Goals
 

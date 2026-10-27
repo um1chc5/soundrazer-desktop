@@ -1,6 +1,6 @@
-# SoundRazer Desktop specifications
+# Unweave specifications
 
-SoundRazer Desktop is a local desktop stem separator with a Python backend and vanilla ES-module web UI; it requires no account and collects no telemetry. The specifications below describe the current app and planned work while keeping canonical audio and user projects local.
+Unweave is a local desktop stem separator with a Python backend and vanilla ES-module web UI; it requires no account and collects no telemetry. The specifications below describe the current app and planned work while keeping canonical audio and user projects local.
 
 ## Ordered specification and status board
 

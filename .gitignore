@@ -28,7 +28,7 @@ build/
 *.msi
 
 # Prebuilt embedded Python runtime the installer bundles (~37 MB of binaries).
-# Rebuild steps are documented at the top of installer/SoundRazer.nsis.
+# Rebuild steps are documented at the top of installer/Unweave.nsis.
 installer/embedded/
 
 # Editor / OS

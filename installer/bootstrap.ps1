@@ -1,14 +1,14 @@
-# SoundRazer Desktop Bootstrap Installer Script
+# Unweave Bootstrap Installer Script
 # Downloads and installs Python, uv, dependencies, and FFmpeg
 
 param(
-    [string]$InstallDir = "$env:LOCALAPPDATA\SoundRazerDesktop",
+    [string]$InstallDir = "$env:LOCALAPPDATA\UnweaveDesktop",
     [switch]$Silent = $false
 )
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "SoundRazer Desktop Installer" -ForegroundColor Cyan
+Write-Host "Unweave Installer" -ForegroundColor Cyan
 Write-Host "================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -107,7 +107,7 @@ try {
 }
 
 # Create virtual environment and install the app
-Write-Host "Setting up SoundRazer Desktop..." -ForegroundColor Yellow
+Write-Host "Setting up Unweave..." -ForegroundColor Yellow
 $venvDir = "$InstallDir\venv"
 
 if (Test-Path $venvDir) {
@@ -128,4 +128,4 @@ uv pip install --python "$venvDir\Scripts\python.exe" -e ".[full]"
 
 Write-Host ""
 Write-Host "Installation complete!" -ForegroundColor Green
-Write-Host "You can launch SoundRazer Desktop from the Start Menu or Desktop shortcut." -ForegroundColor Cyan
+Write-Host "You can launch Unweave from the Start Menu or Desktop shortcut." -ForegroundColor Cyan

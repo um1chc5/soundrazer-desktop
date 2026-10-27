@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>SoundRazer Desktop — AI Audio Stem Separation</title>
-<meta name="description" content="SoundRazer Desktop splits any song into vocals, drums, bass, guitar, piano and more using local AI models. Free, offline, Windows app." />
+<title>Unweave — AI Audio Stem Separation</title>
+<meta name="description" content="Unweave splits any song into vocals, drums, bass, guitar, piano and more using local AI models. Free, offline, Windows app." />
 <link rel="icon" href="assets/icon-256.png" />
 
 <meta property="og:type" content="website" />
-<meta property="og:title" content="SoundRazer Desktop — AI Audio Stem Separation" />
+<meta property="og:title" content="Unweave — AI Audio Stem Separation" />
 <meta property="og:description" content="Split any song into vocals, drums, bass, guitar, piano and more using local AI models. Free, offline, Windows app." />
 <meta property="og:url" content="https://um1chc5.github.io/soundrazer-desktop/" />
 <meta property="og:image" content="https://um1chc5.github.io/soundrazer-desktop/assets/og-image.png" />
@@ -16,7 +16,7 @@
 <meta property="og:image:height" content="630" />
 
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="SoundRazer Desktop — AI Audio Stem Separation" />
+<meta name="twitter:title" content="Unweave — AI Audio Stem Separation" />
 <meta name="twitter:description" content="Split any song into vocals, drums, bass, guitar, piano and more using local AI models. Free, offline, Windows app." />
 <meta name="twitter:image" content="https://um1chc5.github.io/soundrazer-desktop/assets/og-image.png" />
 <style>
@@ -108,6 +108,13 @@
   .step p { margin: 6px 0 0; color: var(--muted); }
   .step strong { color: var(--text); }
 
+  .formerly { margin: -2px 0 10px; font-size: 0.9rem; color: var(--muted); }
+  .credits { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+  .credits h3 { margin: 0 0 10px; font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .credits ul { list-style: none; margin: 0; padding: 0; }
+  .credits li { margin: 0 0 8px; font-size: 0.95rem; }
+  .credits li span { color: var(--muted); font-size: 0.85rem; margin-left: 4px; }
+  .credits-more { margin-top: 16px; font-size: 0.9rem; }
   .reqs { background: var(--bg-alt); border: 1px solid var(--border); border-radius: 14px; padding: 24px 28px; }
   .reqs ul { margin: 0; padding-left: 20px; color: var(--muted); }
   .reqs li { margin: 6px 0; }
@@ -153,16 +160,17 @@
 
 <header class="hero">
   <div class="wrap">
-    <img src="assets/icon-256.png" alt="SoundRazer Desktop icon" class="logo" />
-    <h1>SoundRazer Desktop</h1>
+    <img src="assets/icon-256.png" alt="Unweave icon" class="logo" />
+    <h1>Unweave</h1>
+    <p class="formerly" data-i18n="hero.formerly">Formerly SoundRazer Desktop</p>
     <p class="tagline" data-i18n="hero.tagline">Split any song into vocals, drums, bass, guitar, piano and more — powered by local AI, running entirely on your PC.</p>
-    <a class="btn" href="https://github.com/um1chc5/soundrazer-desktop/releases/latest/download/SoundRazer-Setup-x64.exe">
+    <a class="btn" href="https://github.com/um1chc5/soundrazer-desktop/releases/latest/download/Unweave-Setup-x64.exe">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.59l3.3-3.3 1.4 1.42L12 17.4l-4.7-5.69 1.4-1.42 3.3 3.3V3h0zM5 19h14v2H5z"/></svg>
       <span data-i18n="hero.btn">Download for Windows</span>
       <span class="installer-size" id="installer-size"></span>
     </a>
     <div class="sub-note" data-i18n="hero.subnote">Free &amp; open source · Windows 10/11 (64-bit) · <a href="https://github.com/um1chc5/soundrazer-desktop">View on GitHub</a></div>
-    <div class="credit" data-i18n="hero.credit">By <a href="https://github.com/um1chc5" class="author">um1chc5</a> · built on <a href="https://github.com/pedromtcosta/sound-razor">Sound Razor</a> by <a href="https://github.com/pedromtcosta" class="author">pedromtcosta</a></div>
+    <div class="credit" data-i18n="hero.credit">By <a href="https://github.com/um1chc5" class="author">um1chc5</a> · based on <a href="https://github.com/pedromtcosta/sound-razor">Sound Razor</a> by <a href="https://github.com/pedromtcosta" class="author">pedromtcosta</a></div>
   </div>
 </header>
 
@@ -170,7 +178,7 @@
   <div class="wrap">
     <h2 data-i18n="about.h2">What it does</h2>
     <p class="section-lead" data-i18n="about.lead">
-      SoundRazer Desktop packages <a href="https://github.com/pedromtcosta/sound-razor">Sound Razor</a> into a native Windows
+      Unweave packages <a href="https://github.com/pedromtcosta/sound-razor">Sound Razor</a> into a native Windows
       app with a polished UI. Drop in a track (or paste a YouTube link) and it separates the mix into individual
       instrument stems using AI models such as Demucs, MDX-Net, and RoFormer — all processed locally, nothing uploaded.
     </p>
@@ -254,9 +262,42 @@
   </div>
 </section>
 
+<section>
+  <div class="wrap">
+    <h2 data-i18n="credits.h2">Credits</h2>
+    <p class="section-lead" data-i18n="credits.lead">Unweave is based on <a href="https://github.com/pedromtcosta/sound-razor">Sound Razor</a> by pedromtcosta, and on the work of these people and projects.</p>
+    <div class="credits">
+      <div>
+        <h3 data-i18n="credits.models">AI models</h3>
+        <ul>
+          <li><a href="https://github.com/facebookresearch/demucs">Demucs</a> <span>Meta AI · MIT</span></li>
+          <li><a href="https://github.com/Anjok07/ultimatevocalremovergui">UVR MDX-Net Karaoke 2</a> <span>Ultimate Vocal Remover · MIT</span></li>
+          <li><a href="https://huggingface.co/noblebarkrr/mvsepless_resources">Lead/rhythm guitar model</a> <span>listra92 · hosted by noblebarkrr</span></li>
+        </ul>
+      </div>
+      <div>
+        <h3 data-i18n="credits.built">Built with</h3>
+        <ul>
+          <li><a href="https://github.com/ZFTurbo/Music-Source-Separation-Training">Music-Source-Separation-Training</a> <span>ZFTurbo · MIT</span></li>
+          <li><a href="https://github.com/lucidrains/BS-RoFormer">BS-RoFormer</a> <span>lucidrains · MIT</span></li>
+          <li><a href="https://github.com/nomadkaraoke/python-audio-separator">python-audio-separator</a> <span>nomadkaraoke · MIT</span></li>
+          <li><a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a> · <a href="https://ffmpeg.org">FFmpeg</a> · <a href="https://github.com/r0x0r/pywebview">pywebview</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3 data-i18n="credits.data">Song info &amp; covers</h3>
+        <ul>
+          <li><a href="https://musicbrainz.org">MusicBrainz</a> &amp; <a href="https://coverartarchive.org">Cover Art Archive</a> <span>MetaBrainz Foundation</span></li>
+        </ul>
+      </div>
+    </div>
+    <p class="credits-more" data-i18n="credits.more"><a href="https://github.com/um1chc5/soundrazer-desktop#credits">Full list with licenses</a></p>
+  </div>
+</section>
+
 <footer>
   <div class="wrap">
-    <p data-i18n="footer.p1">MIT licensed. Made by <a href="https://github.com/um1chc5">um1chc5</a>, built on <a href="https://github.com/pedromtcosta/sound-razor">Sound Razor</a> by pedromtcosta.</p>
+    <p data-i18n="footer.p1">MIT licensed. Made by <a href="https://github.com/um1chc5">um1chc5</a>, based on <a href="https://github.com/pedromtcosta/sound-razor">Sound Razor</a> by pedromtcosta.</p>
     <p data-i18n="footer.p2"><a href="https://github.com/um1chc5/soundrazer-desktop">Source on GitHub</a> · <a href="https://github.com/um1chc5/soundrazer-desktop/releases">All releases</a> · <a href="https://github.com/um1chc5/soundrazer-desktop/issues">Report an issue</a></p>
   </div>
 </footer>
@@ -268,9 +309,9 @@
       "hero.tagline": "Tách mọi bài hát thành giọng hát, trống, bass, guitar, piano và hơn thế nữa — bằng AI chạy hoàn toàn trên máy tính của bạn.",
       "hero.btn": "Tải cho Windows",
       "hero.subnote": "Miễn phí &amp; mã nguồn mở · Windows 10/11 (64-bit) · <a href=\"https://github.com/um1chc5/soundrazer-desktop\">Xem trên GitHub</a>",
-      "hero.credit": "Bởi <a href=\"https://github.com/um1chc5\" class=\"author\">um1chc5</a> · xây dựng trên <a href=\"https://github.com/pedromtcosta/sound-razor\">Sound Razor</a> của <a href=\"https://github.com/pedromtcosta\" class=\"author\">pedromtcosta</a>",
+      "hero.credit": "Bởi <a href=\"https://github.com/um1chc5\" class=\"author\">um1chc5</a> · dựa trên <a href=\"https://github.com/pedromtcosta/sound-razor\">Sound Razor</a> của <a href=\"https://github.com/pedromtcosta\" class=\"author\">pedromtcosta</a>",
       "about.h2": "Ứng dụng này làm gì",
-      "about.lead": "SoundRazer Desktop đóng gói <a href=\"https://github.com/pedromtcosta/sound-razor\">Sound Razor</a> thành một ứng dụng Windows gốc với giao diện hiện đại. Thả một bản nhạc vào (hoặc dán link YouTube) và nó sẽ tách bản mix thành từng track nhạc cụ riêng biệt bằng các mô hình AI như Demucs, MDX-Net và RoFormer — xử lý hoàn toàn cục bộ, không tải lên đâu cả.",
+      "about.lead": "Unweave đóng gói <a href=\"https://github.com/pedromtcosta/sound-razor\">Sound Razor</a> thành một ứng dụng Windows gốc với giao diện hiện đại. Thả một bản nhạc vào (hoặc dán link YouTube) và nó sẽ tách bản mix thành từng track nhạc cụ riêng biệt bằng các mô hình AI như Demucs, MDX-Net và RoFormer — xử lý hoàn toàn cục bộ, không tải lên đâu cả.",
       "card.1.h3": "Ứng dụng desktop gốc",
       "card.1.p": "Chạy trong cửa sổ riêng, không cần trình duyệt, với giao diện hiện đại được thiết kế lại.",
       "card.2.h3": "Xử lý 100% cục bộ",
@@ -291,13 +332,20 @@
       "step.2.p": "Ở lần mở đầu tiên, cửa sổ ứng dụng hiện ra ngay và yêu cầu bạn đồng ý tải FFmpeg cùng bộ PyTorch/tách âm thanh (~1.6&nbsp;GB tổng cộng).",
       "step.3.strong": "Nhập một bản nhạc và tách.",
       "step.3.p": "Các mô hình AI (~500&nbsp;MB) sẽ tự động tải về khi bạn tách lần đầu tiên. Sau đó mọi thứ chạy hoàn toàn offline.",
+      "hero.formerly": "Trước đây là SoundRazer Desktop",
+      "credits.h2": "Ghi công",
+      "credits.lead": "Unweave dựa trên <a href=\"https://github.com/pedromtcosta/sound-razor\">Sound Razor</a> của pedromtcosta, cùng công sức của những người và dự án dưới đây.",
+      "credits.models": "Mô hình AI",
+      "credits.built": "Xây dựng bằng",
+      "credits.data": "Thông tin bài hát &amp; ảnh bìa",
+      "credits.more": "<a href=\"https://github.com/um1chc5/soundrazer-desktop#credits\">Danh sách đầy đủ và giấy phép</a>",
       "reqs.h2": "Yêu cầu hệ thống",
       "reqs.os": "<strong>Hệ điều hành:</strong> Windows 10/11 (64-bit)",
       "reqs.ram": "<strong>RAM:</strong> Tối thiểu 8&nbsp;GB, khuyến nghị 16&nbsp;GB",
       "reqs.storage": "<strong>Dung lượng:</strong> ~10&nbsp;GB trống (cho dependencies và models)",
       "reqs.cpu": "<strong>CPU:</strong> Bộ xử lý 64-bit hiện đại (khuyến nghị 4+ nhân)",
       "reqs.gpu": "<strong>GPU:</strong> Tùy chọn — CPU vẫn chạy tốt",
-      "footer.p1": "Giấy phép MIT. Thực hiện bởi <a href=\"https://github.com/um1chc5\">um1chc5</a>, xây dựng trên <a href=\"https://github.com/pedromtcosta/sound-razor\">Sound Razor</a> của pedromtcosta.",
+      "footer.p1": "Giấy phép MIT. Thực hiện bởi <a href=\"https://github.com/um1chc5\">um1chc5</a>, dựa trên <a href=\"https://github.com/pedromtcosta/sound-razor\">Sound Razor</a> của pedromtcosta.",
       "footer.p2": "<a href=\"https://github.com/um1chc5/soundrazer-desktop\">Mã nguồn trên GitHub</a> · <a href=\"https://github.com/um1chc5/soundrazer-desktop/releases\">Tất cả bản phát hành</a> · <a href=\"https://github.com/um1chc5/soundrazer-desktop/issues\">Báo lỗi</a>"
     }
   };
@@ -339,7 +387,7 @@
     fetch("https://api.github.com/repos/um1chc5/soundrazer-desktop/releases/latest")
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
-        var asset = data && data.assets && data.assets.find(function (a) { return a.name === "SoundRazer-Setup-x64.exe"; });
+        var asset = data && data.assets && data.assets.find(function (a) { return a.name === "Unweave-Setup-x64.exe"; });
         if (!asset) return;
         var mb = asset.size / (1024 * 1024);
         var size = "~" + (mb < 10 ? mb.toFixed(1) : Math.round(mb)) + " MB";

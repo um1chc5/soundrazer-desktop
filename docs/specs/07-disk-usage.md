@@ -10,11 +10,11 @@ remove.
 
 | Data | Windows | Linux | Removed on uninstall? |
 |---|---|---|---|
-| App code + embedded runtime | `%ProgramFiles64%\SoundRazer Desktop` | `~/.local/share/soundrazer` | **Yes** |
-| Model cache | `%LOCALAPPDATA%\SoundRazer Desktop\models` | `~/.cache/soundrazer-desktop/models` | **No** |
-| Config (`ui.json`) | `%LOCALAPPDATA%\SoundRazer Desktop\ui.json` | `~/.local/share/soundrazer-desktop/ui.json` | **No** |
-| Projects (originals + stems + exports) | `Documents\SoundRazer Desktop` | `~/Music/SoundRazer Desktop` | **No** |
-| Downloaded FFmpeg | `$INSTDIR` (beside the app) | `~/.local/share/soundrazer/app/` | Yes (Windows) |
+| App code + embedded runtime | `%ProgramFiles64%\Unweave` | `~/.local/share/unweave` | **Yes** |
+| Model cache | `%LOCALAPPDATA%\Unweave\models` | `~/.cache/unweave/models` | **No** |
+| Config (`ui.json`) | `%LOCALAPPDATA%\Unweave\ui.json` | `~/.local/share/unweave/ui.json` | **No** |
+| Projects (originals + stems + exports) | `Documents\Unweave` | `~/Music/Unweave` | **No** |
+| Downloaded FFmpeg | `$INSTDIR` (beside the app) | `~/.local/share/unweave/app/` | Yes (Windows) |
 
 Resolved in [`ui_entrypoint.py`](../../app/ui_entrypoint.py) (`writable_dirs()`) and
 [`tools.py`](../../app/sound_razor/tools.py).
@@ -97,17 +97,17 @@ would surface as a confusing FFmpeg or model error rather than "out of space".
 
 ## Uninstall behavior
 
-**Windows** (`installer/SoundRazer.nsis`, `Section "Uninstall"`) removes only:
+**Windows** (`installer/Unweave.nsis`, `Section "Uninstall"`) removes only:
 
 - `$INSTDIR` contents (app, `sound_razor/`, `runtime/`, `launch.bat`, `ui_entrypoint.py`,
   docs, icon) and `$INSTDIR` itself
 - Start Menu folder and the desktop shortcut
 - The `HKLM` uninstall registry key
 
-It **never touches** `%LOCALAPPDATA%\SoundRazer Desktop` (models + config) or
-`Documents\SoundRazer Desktop` (projects). Consequence: uninstall then reinstall keeps
+It **never touches** `%LOCALAPPDATA%\Unweave` (models + config) or
+`Documents\Unweave` (projects). Consequence: uninstall then reinstall keeps
 your ~455 MB of models and skips re-downloading. To fully clean up, the user must
-delete `%LOCALAPPDATA%\SoundRazer Desktop` manually.
+delete `%LOCALAPPDATA%\Unweave` manually.
 
 **Linux** (`installer/install-linux.sh --uninstall`) matches this exactly: it removes
 the prefix, launcher, `.desktop` entry, and icon, and prints the three preserved paths

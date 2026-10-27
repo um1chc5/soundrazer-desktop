@@ -20,7 +20,7 @@ A local audio stem separation tool. Takes a song recording and splits it into se
 
 ## Project structure
 ```
-soundrazer-desktop/
+unweave/
 ├── app/sound_razor/       # Python application package
 │   ├── audio/             # Separation/audio modules
 │   │   ├── pipeline.py

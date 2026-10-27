@@ -1,4 +1,4 @@
-"""SoundRazer Desktop - Native app using pywebview."""
+"""Unweave - Native app using pywebview."""
 import sys
 import os
 import threading
@@ -58,14 +58,15 @@ def writable_dirs():
     Documents folder, not a guessed %USERPROFILE%\\Documents that may silently diverge
     from what Explorer actually shows the user as "Documents".
     """
-    local_app_data = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
-    app_data_dir = local_app_data / "SoundRazer Desktop"
+    from sound_razor.tools import APP_NAME, app_data_dir as app_data, migrate_legacy_data_dir
+    migrate_legacy_data_dir()
+    app_data_dir = app_data()
     documents = known_folder("{FDD39AD0-238F-46AF-ADB4-6C85480369C7}",  # FOLDERID_Documents
                               Path(os.environ.get("USERPROFILE") or Path.home()) / "Documents")
     return {
         "config": app_data_dir / "ui.json",
         "cache": app_data_dir / "models",
-        "default_root": documents / "SoundRazer Desktop",
+        "default_root": documents / APP_NAME,
     }
 
 # Which corner/edge stays put while the opposite one follows the mouse, keyed by the
@@ -166,7 +167,7 @@ def main():
         # ?native=1 tells the page (synchronously, no race) to show its own title bar
         # immediately; its buttons call back through controls above via the HTTP API.
         window = webview.create_window(
-            title="SoundRazer Desktop",
+            title="Unweave",
             url=f"{url}/?native=1",
             width=1400,
             height=900,

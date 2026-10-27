@@ -21,7 +21,7 @@ from ..projects.metadata import MetadataLookup
 from ..audio.sources import youtube_url, youtube_command
 from ..audio.pipeline import probe_duration, parse_trim
 from ..audio.exports import FORMATS, export_stems
-from ..tools import MISSING_FFMPEG, ensure_ffmpeg_on_path
+from ..tools import MISSING_FFMPEG, app_version, ensure_ffmpeg_on_path
 from ..setup_env import (FFMPEG_SIZE_MB, RUNTIME_SIZE_MB, SEPARATION_SIZE_MB, YOUTUBE_SIZE_MB,
                          ffmpeg_ok, runtime_ok, separation_ok, youtube_ok, run_setup)
 
@@ -70,6 +70,9 @@ def clock_seconds(text: str):
     for part in parts:
         total = total * 60 + part
     return total
+
+
+APP_VERSION = app_version()
 
 
 def public_job(job: dict) -> dict:
@@ -252,7 +255,7 @@ class Library:
                     "max_concurrent_jobs": self.max_concurrent_jobs,
                     "job": job_shim,
                     "finished_jobs": [public_job(job) for job in self.finished_jobs],
-                    "setup": self.setup_status(), "now": time.time()}
+                    "setup": self.setup_status(), "version": APP_VERSION, "now": time.time()}
 
     def _track_progress(self, job: dict, line: str) -> bool:
         """Update a specific job's phase/progress/ETA from a CLI output line.

@@ -1,6 +1,6 @@
 # Linux Install Guide
 
-SoundRazer Desktop runs on Linux from the same source as the Windows build. There
+Unweave runs on Linux from the same source as the Windows build. There
 is no `.exe` and no installer wizard — Linux installs with a script that sets up a
 virtual environment and a desktop entry, the same way the Windows
 `bootstrap.ps1` sets one up on Windows.
@@ -16,7 +16,7 @@ cd soundrazer-desktop
 Then start it from your applications menu, or run:
 
 ```bash
-soundrazer
+unweave
 ```
 
 On first launch the app opens its own setup screen and offers to download FFmpeg
@@ -27,7 +27,7 @@ Separate stay disabled until you approve that download.
 
 | Command | Effect |
 |---|---|
-| `./installer/install-linux.sh` | Install to `~/.local/share/soundrazer` (default) |
+| `./installer/install-linux.sh` | Install to `~/.local/share/unweave` (default) |
 | `--prefix DIR` | Install somewhere else |
 | `--full` | Also download PyTorch/audio-separator now instead of on first launch |
 | `--no-deps` | Copy code only; skip `pip install` (fast re-install of app changes) |
@@ -66,23 +66,23 @@ If these packages are missing the app still runs — it just falls back to openi
 in your default browser. To force that deliberately:
 
 ```bash
-SOUNDRAZER_BROWSER=1 soundrazer
+UNWEAVE_BROWSER=1 unweave
 ```
 
 ## Where things go
 
 | Path | Contents |
 |---|---|
-| `~/.local/share/soundrazer` | The app itself and its `.venv` |
-| `~/.local/bin/soundrazer` | Launcher script |
-| `~/.local/share/applications/soundrazer.desktop` | Menu entry |
-| `~/.local/share/icons/soundrazer.png` | Icon |
-| `~/.local/share/soundrazer-desktop/ui.json` | Your last-used projects folder |
-| `~/.cache/soundrazer-desktop/models` | Downloaded AI models (~455 MB) |
-| `~/Music/SoundRazer Desktop` | Your separated songs (the default projects folder) |
+| `~/.local/share/unweave` | The app itself and its `.venv` |
+| `~/.local/bin/unweave` | Launcher script |
+| `~/.local/share/applications/unweave.desktop` | Menu entry |
+| `~/.local/share/icons/unweave.png` | Icon |
+| `~/.local/share/unweave/ui.json` | Your last-used projects folder |
+| `~/.cache/unweave/models` | Downloaded AI models (~455 MB) |
+| `~/Music/Unweave` | Your separated songs (the default projects folder) |
 
 FFmpeg, once downloaded by the first-run setup, lands next to the app in
-`~/.local/share/soundrazer/`.
+`~/.local/share/unweave/`.
 
 ## Uninstall
 
@@ -95,8 +95,8 @@ your models, settings and separated songs — delete these by hand for a clean
 slate:
 
 ```bash
-rm -rf ~/.local/share/soundrazer-desktop ~/.cache/soundrazer-desktop \
-       ~/Music/"SoundRazer Desktop"
+rm -rf ~/.local/share/unweave ~/.cache/unweave \
+       ~/Music/"Unweave"
 ```
 
 ## Troubleshooting
@@ -107,7 +107,7 @@ installer creates the venv with `--system-site-packages` for this reason — che
 it with:
 
 ```bash
-~/.local/share/soundrazer/.venv/bin/python -c \
+~/.local/share/unweave/.venv/bin/python -c \
   "import gi; gi.require_version('WebKit2','4.1'); from gi.repository import WebKit2; print('ok')"
 ```
 
@@ -121,19 +121,19 @@ Run the app's first-run setup, or install FFmpeg from your distro
 The static FFmpeg build the app downloads is x86-64 only. On arm64, install FFmpeg
 with your package manager instead — the app finds it on `PATH`.
 
-**`soundrazer: command not found`.**
+**`unweave: command not found`.**
 `~/.local/bin` isn't on your `PATH`. Either add it, or launch with the full path
-`~/.local/bin/soundrazer`.
+`~/.local/bin/unweave`.
 
 ## Notes for maintainers
 
 - The Linux installer is the counterpart to `installer/bootstrap.ps1` (dependency
-  setup) plus `installer/SoundRazer.nsis` (launcher, menu entry, uninstall). NSIS
+  setup) plus `installer/Unweave.nsis` (launcher, menu entry, uninstall). NSIS
   has no Linux equivalent here because there's no prebuilt Python runtime to ship;
   the script builds a venv instead.
 - `app/sound_razor/setup_env.py` picks the FFmpeg archive per platform — the
   gyan.dev `.zip` on Windows, the johnvansickle static `.tar.xz` on Linux — and
   sets the executable bit after extracting the tarball.
-- `installer/SoundRazer.nsis` reads the app from `app/` and the packaging metadata
+- `installer/Unweave.nsis` reads the app from `app/` and the packaging metadata
   from the repo root's `pyproject.toml`; `install-linux.sh` mirrors that layout so
   both installers stay in sync with one source tree.

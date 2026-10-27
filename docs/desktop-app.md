@@ -1,4 +1,4 @@
-# Desktop App — Technical Plan (`aloso/soundrazer-desktop`)
+# Desktop App — Technical Plan (`aloso/unweave`)
 
 ## Goal
 Package Sound Razor into a standalone Windows `.exe` installer so non-technical users can install and run it without touching Python, venv, or PATH.

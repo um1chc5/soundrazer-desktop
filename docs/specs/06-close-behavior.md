@@ -42,7 +42,7 @@ there is no record the job existed; it vanishes without any message.
 An interrupted run leaves an orphaned staging directory inside the project:
 
 ```
-~/Music/SoundRazer Desktop/Landscape (...)/.separation-mq5d5qc3/
+~/Music/Unweave/Landscape (...)/.separation-mq5d5qc3/
 ```
 
 Found on a real machine (Oct 26), containing an empty `stems/`. Note the project's

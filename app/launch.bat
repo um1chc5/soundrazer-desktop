@@ -7,7 +7,7 @@ rem stderr redirected to a file instead (as this wrapper does) works every time.
 rem Root cause not fully understood — this works, so it ships.
 setlocal
 set "SR_DIR=%~dp0"
-set "SR_LOG_DIR=%LOCALAPPDATA%\SoundRazer Desktop"
+set "SR_LOG_DIR=%LOCALAPPDATA%\Unweave"
 if not exist "%SR_LOG_DIR%" mkdir "%SR_LOG_DIR%" >nul 2>&1
 rem Keep Python's shared per-user site-packages (%APPDATA%\Python) out of the app and
 rem every process it starts; setup's packages live in the app data folder instead.
