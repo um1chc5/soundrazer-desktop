@@ -72,6 +72,18 @@ def valid_trim(value):
     return {"start": start, "end": end}
 
 
+STEM_EXTENSIONS = (".flac", ".wav")  # FLAC since 1.2.1; older projects keep WAV stems
+
+
+def stem_file(stems_dir: Path, stem: str) -> str | None:
+    """File name of a stem in either storage format, preferring FLAC; None if absent."""
+    for extension in STEM_EXTENSIONS:
+        path = stems_dir / f"{stem}{extension}"
+        if path.is_file() and not path.is_symlink():
+            return path.name
+    return None
+
+
 def is_guitar_split_stem(name: str) -> bool:
     return name in {"lead", "rhythm", "guitar-target", "guitar-remainder"} or name.startswith("guitar-target-")
 

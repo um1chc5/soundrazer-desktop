@@ -6,6 +6,7 @@ import {renderLibrary} from './views/library.js';
 import {renderSong} from './views/song.js';
 import {renderSetup, renderSetupView, renderSetupBanner} from './views/setup.js';
 import {t, onLangChange} from './i18n.js';
+import {jobWhat, openQueue, renderQueue} from './queue.js';
 function clearSongTrim() {
   store.songTrimEditor?.destroy();
   store.songTrimEditor = null;
@@ -56,14 +57,15 @@ export function renderChrome() {
   const queued = (store.state.jobs || []).filter(j => j.position > 0).length;
   pill.hidden = !jobRunning() && queued === 0;
   if (jobRunning()) {
-    const what = job.kind === 'youtube' ? t('nav.downloading') : job.kind === 'setup' ? t('nav.settingUp') : job.kind === 'export' ? t('nav.exporting') : job.guitar_split ? t('nav.splittingGuitar') : t('nav.separating');
-    const tail = queued ? ` • ${queued} waiting` : '';
+    const what = jobWhat(job);
+    const tail = queued ? ` • ${t('nav.jobWaiting', {count: queued})}` : '';
     $('job-pill-text').textContent = t('nav.jobPillText', {what, pct: Math.floor(job.progress || 0)}) + tail;
   } else if (queued) {
     $('job-pill-text').textContent = t('nav.jobQueued', {count: queued});
   }
+  renderQueue();
 }
-$('job-pill').onclick = () => { const job = store.state.job; if (job?.project) selectProject(job.project); else show('new'); };
+$('job-pill').onclick = openQueue;
 
 export async function refresh() {
   const next = await api('/api/state');
@@ -76,10 +78,16 @@ export async function refresh() {
   render();
 }
 export function announce() {
+  // Jobs can finish while another is still running, so walk every recently finished one.
+  const jobs = [...(store.state.finished_jobs || [])];
   const job = store.state.job;
-  if (!job || job.kind === 'youtube' || store.announced === job.id) return;
+  if (job && !jobs.some(item => item.id === job.id)) jobs.push(job);
+  jobs.forEach(announceJob);
+}
+function announceJob(job) {
+  if (job.kind === 'youtube' || store.announced.has(job.id)) return;
   if (job.status === 'succeeded') {
-    store.announced = job.id;
+    store.announced.add(job.id);
     if (job.kind === 'setup') {
       notice(t('setup.complete'), 'success');
       store.setupJobAnnounced = job.id;

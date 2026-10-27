@@ -105,6 +105,13 @@
             <p class="hint" data-i18n="youtube.hint">Only download videos you have the right to use. Audio is extracted with yt-dlp. YouTube imports run full-length first; trim afterwards with Separate again.</p>
           </div>
 
+          <div id="new-trim" class="trim-section" hidden>
+            <div class="trim-head"><h3><span data-i18n="step.section">Section</span> <span class="optional" data-i18n="details.optional">optional</span></h3></div>
+            <p id="new-trim-hint" class="hint"></p>
+            <div id="new-trim-editor"></div>
+            <div id="new-trim-chip" class="trim-chip" hidden></div>
+          </div>
+
           <details class="song-details">
             <summary><span data-i18n="details.songDetails">Song details</span> <span class="optional" data-i18n="details.optional">optional</span></summary>
             <div class="field-grid">
@@ -120,14 +127,7 @@
           <div class="card-step"><span class="step-badge">2</span><h2 id="stems-h" data-i18n="step.stemsToExtract">Stems to extract</h2></div>
           <div id="new-stems" class="stem-picker"></div>
 
-          <div class="card-step"><span class="step-badge">3</span><h2 data-i18n="step.section">Section</h2></div>
-          <div id="new-trim" class="trim-section" hidden>
-            <p id="new-trim-hint" class="hint"></p>
-            <div id="new-trim-editor"></div>
-            <div id="new-trim-chip" class="trim-chip" hidden></div>
-          </div>
-
-          <div class="card-step"><span class="step-badge">4</span><h2 data-i18n="step.saveTo">Save to</h2></div>
+          <div class="card-step"><span class="step-badge">3</span><h2 data-i18n="step.saveTo">Save to</h2></div>
           <div class="output-row">
             <span class="folder-glyph" aria-hidden="true"></span>
             <div class="output-text">
@@ -332,6 +332,15 @@
         <button type="button" class="btn btn-ghost close-dialog" data-i18n="common.close">Close</button>
         <button id="export-submit" type="submit" class="btn btn-primary" data-i18n="song.export">Export</button>
       </div>
+    </form>
+  </dialog>
+
+  <dialog id="queue-dialog" class="dialog-sm">
+    <form method="dialog">
+      <header class="dialog-header"><h2 data-i18n="queue.title">Job queue</h2><button type="button" class="close-dialog icon-close" data-i18n-title="common.close"></button></header>
+      <p class="dialog-sub" data-i18n="queue.sub">Jobs run one after another. Different songs can run side by side when your computer has room.</p>
+      <ul id="queue-list" class="queue-list"></ul>
+      <p id="queue-empty" class="hint" data-i18n="queue.empty" hidden>Nothing is running or waiting.</p>
     </form>
   </dialog>
 

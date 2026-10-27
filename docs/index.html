@@ -329,9 +329,10 @@
   var initial = saved || (navigator.language && navigator.language.toLowerCase().indexOf("vi") === 0 ? "vi" : "en");
   applyLang(initial);
 
-  (function loadInstallerSize() {
+  (function loadInstallerInfo() {
+    // Latest release's version and installer size, shown on the download button.
     var el = document.getElementById("installer-size");
-    var cacheKey = "srInstallerSize";
+    var cacheKey = "srInstallerInfo";
     var cached = null;
     try { cached = JSON.parse(localStorage.getItem(cacheKey) || "null"); } catch (_) {}
     if (cached && cached.text && Date.now() - cached.at < 3600000) { el.textContent = cached.text; return; }
@@ -341,7 +342,9 @@
         var asset = data && data.assets && data.assets.find(function (a) { return a.name === "SoundRazer-Setup-x64.exe"; });
         if (!asset) return;
         var mb = asset.size / (1024 * 1024);
-        var text = "(~" + (mb < 10 ? mb.toFixed(1) : Math.round(mb)) + " MB)";
+        var size = "~" + (mb < 10 ? mb.toFixed(1) : Math.round(mb)) + " MB";
+        var version = data.tag_name ? data.tag_name.replace(/^v?/, "v") : "";
+        var text = "(" + (version ? version + " · " : "") + size + ")";
         el.textContent = text;
         try { localStorage.setItem(cacheKey, JSON.stringify({text: text, at: Date.now()})); } catch (_) {}
       })

@@ -23,7 +23,8 @@ export function buildProgress(panel) {
     </div>`;
   panel.querySelector('.pv-cancel').onclick = async event => {
     event.currentTarget.disabled = true;
-    try { await api('/api/cancel', {}); await nav.refresh(); } catch (error) { notice(error.message, 'error'); }
+    // Cancel this panel's job only; other running or queued jobs keep going.
+    try { await api('/api/cancel', panel.dataset.jobId ? {job_id: panel.dataset.jobId} : {}); await nav.refresh(); } catch (error) { notice(error.message, 'error'); }
   };
   applyProgressChrome(panel);
 }
@@ -40,6 +41,9 @@ onLangChange(() => { for (const panel of [$('job-panel'), $('yt-panel')]) applyP
 export const CIRCUMFERENCE = 2 * Math.PI * 52;
 
 export function renderProgress(panel, job) {
+  panel.dataset.jobId = job.id; panel.job = job;
+  if (job.status === 'queued') { renderQueued(panel, job); return; }
+  panel.querySelector('.pv-eta').closest('.pv-stats').hidden = false;
   const youtube = job.kind === 'youtube';
   const setup = job.kind === 'setup';
   const exportJob = job.kind === 'export';
@@ -93,7 +97,22 @@ export function renderProgress(panel, job) {
   panel.querySelector('.pv-log').textContent = (job.logs || []).join('\n');
   renderTimers(panel, job);
 }
+function renderQueued(panel, job) {
+  panel.dataset.status = 'queued';
+  panel.classList.remove('busy');
+  panel.querySelector('.pv-num').textContent = 0;
+  panel.querySelector('.pv-bar').style.strokeDashoffset = `${CIRCUMFERENCE}`;
+  panel.querySelector('.pv-linebar i').style.width = '0%';
+  panel.querySelector('.pv-title').textContent = t('queue.waitingTitle', {position: job.position});
+  panel.querySelector('.pv-sub').textContent = t('queue.waitingSub');
+  const cancel = panel.querySelector('.pv-cancel');
+  cancel.hidden = false; cancel.disabled = false;
+  panel.querySelector('.pv-steps').replaceChildren();
+  panel.querySelector('.pv-eta').closest('.pv-stats').hidden = true;
+  panel.querySelector('.pv-log').textContent = '';
+}
 export function renderTimers(panel, job) {
+  if (job.status === 'queued') return;
   const now = serverNow();
   panel.querySelector('.pv-elapsed').textContent = duration((job.finished || now) - job.started);
   const running = ['running', 'cancelling'].includes(job.status);
@@ -106,7 +125,6 @@ export function renderTimers(panel, job) {
   panel.querySelector('.pv-eta').textContent = eta;
 }
 setInterval(() => {
-  const job = store.state.job; if (!job) return;
-  for (const panel of [$('job-panel'), $('yt-panel')]) if (!panel.hidden) renderTimers(panel, job);
+  for (const panel of [$('job-panel'), $('yt-panel')]) if (!panel.hidden && panel.job) renderTimers(panel, panel.job);
 }, 500);
 

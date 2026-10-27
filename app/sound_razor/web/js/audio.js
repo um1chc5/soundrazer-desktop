@@ -1,5 +1,5 @@
 import {colors, ORIGINAL_COLOR, STEMS, ORIGINAL_FILE} from './constants.js';
-import {$, el, token, time, notice, jobRunning, projectUrl, stemLabel} from './core.js';
+import {$, el, token, time, notice, jobPending, projectJob, projectUrl, stemLabel} from './core.js';
 import {store} from './store.js';
 import {StemPlayer} from './player.js';
 import {openSplitDialog} from './split.js';
@@ -185,15 +185,16 @@ export function renderTracks() {
   $('tracks').replaceChildren();
   for (const [index, track] of player.tracks.entries()) {
     const isOriginal = track.file === ORIGINAL_FILE;
-    const color = isOriginal ? ORIGINAL_COLOR : (STEMS.find(([value]) => `${value}.flac` === track.file)?.[2] || colors[index % colors.length]);
+    const stemName = track.file.replace(/\.(flac|wav)$/i, '');  // FLAC since 1.2.1; older projects keep WAV
+    const color = isOriginal ? ORIGINAL_COLOR : (STEMS.find(([value]) => value === stemName)?.[2] || colors[index % colors.length]);
     const row = el('div', isOriginal ? 'track track-original' : 'track'); row.style.setProperty('--track-color', color);
     const label = el('div'); label.append(el('div', 'track-name', track.name[0].toUpperCase() + track.name.slice(1)),
       el('div', 'track-detail', `${track.buffer.numberOfChannels === 1 ? 'MONO' : 'STEREO'} · ${time(track.buffer.duration)}`));
-    if (track.file === 'guitar.flac') {
+    if (!isOriginal && stemName === 'guitar') {
       const split = el('button', 'split-guitar');
       split.type = 'button'; split.title = t('audio.splitGuitarTitle');
       split.setAttribute('aria-label', t('audio.splitGuitarTitle'));
-      split.dataset.splitGuitar = ''; split.disabled = !!jobRunning();
+      split.dataset.splitGuitar = ''; split.disabled = jobPending(projectJob(store.selected));
       split.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h5c4 0 3-7 7-7h4M9 12c4 0 3 7 7 7h4M17 2l3 3-3 3M17 16l3 3-3 3"/></svg>';
       const projectId = store.selected;
       split.onclick = () => { player.pause(); openSplitDialog(projectId, track); };

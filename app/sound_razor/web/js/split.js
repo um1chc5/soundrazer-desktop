@@ -1,4 +1,4 @@
-import {$, el, notice, api, projectUrl} from './core.js';
+import {$, el, notice, api, projectUrl, jobPending, projectJob} from './core.js';
 import {store, nav} from './store.js';
 import {TrimEditor, trimRequest, sectionText} from './trim.js';
 import {t} from './i18n.js';
@@ -43,7 +43,7 @@ $('split-dialog').addEventListener('close', () => store.splitEditor?.stopPreview
 
 $('split-form').onsubmit = async event => {
   event.preventDefault();
-  if (!store.splitProject || jobRunningGuard()) return;
+  if (!store.splitProject || jobPending(projectJob(store.splitProject))) return;
   const duration = store.splitEditor?.duration || 0;
   const offset = store.splitEditor?.displayOffset || 0;
   const trim = trimRequest(store.splitRange, duration)
@@ -63,7 +63,3 @@ $('split-form').onsubmit = async event => {
   }
 };
 
-function jobRunningGuard() {
-  const job = store.state.job;
-  return job && ['running', 'cancelling'].includes(job.status);
-}

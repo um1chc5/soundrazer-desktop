@@ -113,8 +113,9 @@ def split_guitar(source: Path, output: Path, cache: Path, trim=None) -> list[Pat
         }
     with tempfile.TemporaryDirectory(prefix='.guitar-split-', dir=output) as temporary:
         stage = Path(temporary)
-        sf.write(stage/paths[0].name, lead, sr)
-        sf.write(stage/paths[1].name, mix-lead, sr)
+        # 24-bit: FLAC has no float format, and soundfile would default to 16-bit.
+        sf.write(stage/paths[0].name, lead, sr, subtype='PCM_24')
+        sf.write(stage/paths[1].name, mix-lead, sr, subtype='PCM_24')
         (stage/settings_path.name).write_text(json.dumps(settings, indent=2)+'\n')
         validate_outputs(source, paths + [settings_path])
         for path in paths + [settings_path]:

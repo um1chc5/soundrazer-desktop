@@ -80,19 +80,21 @@ export function initTitlebar() {
   };
   let closePending = false;  // set when the backend asks for close confirmation
 
-$('win-close').onclick = async () => {
-  if (closePending) { await windowAction('close', {confirm: true}); return; }
-  const result = await windowAction('close');
-  if (result?.confirm) {
-    closePending = true;
-    $('close-confirm-message').textContent = result.message || t('dialog.closeConfirm.message');
-    $('close-confirm-dialog').showModal();
-  }
-};
-$('close-confirm-submit').onclick = async event => {
-  event.preventDefault();
-  closePending = false;
-  $('close-confirm-dialog').close();
-  await windowAction('close', {confirm: true});
-};
+  $('win-close').onclick = async () => {
+    if (closePending) { await windowAction('close', {confirm: true}); return; }
+    const result = await windowAction('close');
+    if (result?.confirm) {
+      closePending = true;
+      $('close-confirm-message').textContent = result.message || t('dialog.closeConfirm.message');
+      $('close-confirm-dialog').showModal();
+    }
+  };
+  $('close-confirm-submit').onclick = async event => {
+    event.preventDefault();
+    closePending = false;
+    $('close-confirm-dialog').close();
+    await windowAction('close', {confirm: true});
+  };
+  // Cancel must re-arm the prompt, or the next close click would skip it.
+  $('close-confirm-dialog').addEventListener('close', () => { closePending = false; });
 }

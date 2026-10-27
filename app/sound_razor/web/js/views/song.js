@@ -1,4 +1,4 @@
-import {$, el, activeProject, jobRunning, api, notice, projectUrl, stemLabel} from '../core.js';
+import {$, el, activeProject, jobPending, projectJob, findJob, queueBusy, api, notice, projectUrl, stemLabel} from '../core.js';
 import {store, nav} from '../store.js';
 import {renderProgress} from '../progress.js';
 import {pickerValue, pickerValid} from '../picker.js';
@@ -94,7 +94,7 @@ function openExportDialog(success = false) {
   const syncExportSubmit = () => {
     const formats = $('export-formats').querySelectorAll('input:checked').length;
     const stems = $('export-stems').querySelectorAll('input:checked').length;
-    $('export-submit').disabled = !formats || !stems || !!jobRunning();
+    $('export-submit').disabled = !formats || !stems || jobPending(projectJob(project.id));
   };
   $('export-formats').onchange = syncExportSubmit;
   $('export-stems').onchange = syncExportSubmit;
@@ -129,10 +129,10 @@ export function renderSong() {
   $('source-name').textContent = project.original || t('song.noOriginalFile');
   $('project-warning').textContent = project.warnings.join(' ');
   $('project-warning').hidden = !project.warnings.length;
-  const job = store.state.job;
-  const belongs = job && job.project === store.selected && job.kind !== 'youtube';
-  const busyHere = belongs && jobRunning();
-  const showJob = belongs && (busyHere || ['failed', 'cancelled'].includes(job.status));
+  // This song's own job; jobs for other songs only queue up behind it.
+  const job = projectJob(store.selected);
+  const busyHere = jobPending(job);
+  const showJob = !!job && (busyHere || ['failed', 'cancelled'].includes(job.status));
   $('job-panel').hidden = !showJob;
   if (showJob) renderProgress($('job-panel'), job);
   const hasStems = project.stems.length > 0;
@@ -148,18 +148,19 @@ export function renderSong() {
   $('separation-description').textContent = hasStems
     ? t('song.rerunReplaces')
     : t('song.notSeparatedYet');
-  $('separate').disabled = !project.original || !!jobRunning() || !pickerValid($('song-stems'));
-  $('separate').textContent = jobRunning() && !busyHere ? t('start.anotherRunning') : hasStems ? t('song.separateAgain') : t('song.separateStemsButton');
-  $('delete-open').disabled = !!busyHere;
-  $('resep-open').disabled = !!jobRunning();
-  $('export-open').disabled = !hasStems || !!jobRunning();
-  document.querySelectorAll('[data-split-guitar]').forEach(button => { button.disabled = !!jobRunning(); });
-  if (store.exportPending && job && store.exportPending.jobId === job.id) {
-    if (job.status === 'succeeded' && store.exportOffered !== job.id) {
-      store.exportOffered = job.id;
+  $('separate').disabled = !project.original || busyHere || !pickerValid($('song-stems'));
+  $('separate').textContent = queueBusy() && !busyHere ? t('start.addToQueue') : hasStems ? t('song.separateAgain') : t('song.separateStemsButton');
+  $('delete-open').disabled = busyHere;
+  $('resep-open').disabled = busyHere;
+  $('export-open').disabled = !hasStems || busyHere;
+  document.querySelectorAll('[data-split-guitar]').forEach(button => { button.disabled = busyHere; });
+  const exported = store.exportPending && findJob(store.exportPending.jobId);
+  if (exported && exported.project === store.selected) {
+    if (exported.status === 'succeeded' && store.exportOffered !== exported.id) {
+      store.exportOffered = exported.id;
       store.exportPending = null;
       openExportDialog(true);
-    } else if (['failed', 'cancelled'].includes(job.status)) {
+    } else if (['failed', 'cancelled'].includes(exported.status)) {
       store.exportPending = null;
     }
   }
@@ -191,7 +192,7 @@ $('export-clipping').onchange = () => { $('export-warning').hidden = $('export-c
 $('export-reveal').onclick = () => api(`${projectUrl(store.selected)}/reveal`, {root: store.state.root, target: 'exports'}).catch(e => notice(e.message, 'error'));
 $('export-form').onsubmit = async event => {
   event.preventDefault();
-  if (!store.selected || jobRunning()) return;
+  if (!store.selected || jobPending(projectJob(store.selected))) return;
   const formats = [...$('export-formats').querySelectorAll('input:checked')].map(input => input.value);
   const stems = [...$('export-stems').querySelectorAll('input:checked')].map(input => input.value);
   if (!formats.length) { $('export-error').textContent = t('export.chooseFormat'); return; }

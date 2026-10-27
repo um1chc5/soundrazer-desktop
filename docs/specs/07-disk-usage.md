@@ -140,15 +140,18 @@ decodes it natively) and compresses PCM audio to roughly 50–60% of WAV size.
 
 Implemented:
 
-- `pipeline.py`: `create_separator(output_format="FLAC")`; `combine_other()` mixes to
-  float32 WAV then encodes to FLAC before storing.
-- `guitar_split.py`: writes `lead.flac` / `rhythm.flac` via `soundfile` (FLAC subtype);
-  reads FLAC source natively.
+- `pipeline.py`: `create_separator(output_format="FLAC")`; the separator matches its
+  16-bit input, so these stems are bit-exact with the old WAVs. `combine_other()` mixes
+  to float32 WAV then encodes to 24-bit FLAC before storing (FLAC has no float format).
+- `guitar_split.py`: writes `lead.flac` / `rhythm.flac` via `soundfile` as 24-bit
+  (`PCM_24`; soundfile would otherwise default to 16-bit); reads either format.
 - `store.py`: stem detection matches both `.wav` and `.flac`; legacy `.wav` stems still
   listed and played.
-- `library.py`: separation CLI output checked as `.flac`; guitar-split input is `guitar.flac`.
+- `library.py`: separation CLI output checked as `.flac`; guitar-split input is whichever
+  of `guitar.flac` / `guitar.wav` exists (`store.stem_file()`).
 - `server.py`: audio route serves `audio/flac` for `.flac` names, `audio/wav` otherwise.
-- `web/js/audio.js`: stem color lookup and guitar split button keyed on `.flac`.
+- `web/js/audio.js`: stem color lookup and guitar split button keyed on the stem name,
+  ignoring `.flac` / `.wav`.
 
 Expected reduction: **~40–50% off stem storage on every project**.
 

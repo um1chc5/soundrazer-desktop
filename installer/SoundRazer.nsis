@@ -36,7 +36,7 @@
 !include "MUI2.nsh"
 
 !define NAME "SoundRazer Desktop"
-!define VERSION "1.2.0"
+!define VERSION "1.2.1"
 !define PACKAGE_NAME "SoundRazer-Setup-x64"
 !define REG_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${NAME}"
 !define ICON "..\assets\icon.ico"
@@ -63,7 +63,8 @@ Section "SoundRazer Desktop" SecMain
   SectionIn RO
   SetRegView 64
   SetOutPath "$INSTDIR"
-  File /r "..\app\*"
+  ; Local dev leftovers in app\ (bytecode caches, the editable install's egg-info) never ship.
+  File /r /x __pycache__ /x *.egg-info "..\app\*"
   File "..\pyproject.toml"
   File "..\README.md"
   File "..\LICENSE"

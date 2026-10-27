@@ -72,11 +72,12 @@ def combine_other(by_stem: dict[str, Path], model_stems: tuple[str, ...],
             "-filter_complex", f"amix=inputs={len(names)}:duration=longest:normalize=0",
             "-c:a", "pcm_f32le", str(mixed),
         ], check=True, stdout=sys.stderr)
-        # Store the final Other stem as FLAC (lossless, ~50% smaller than WAV).
+        # Store the final Other stem as 24-bit FLAC: FLAC has no float format, and
+        # 24-bit keeps the float mix's precision at roughly half the size of WAV.
         flac = Path(temporary) / "other.flac"
         subprocess.run([
             "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
-            "-i", str(mixed), "-c:a", "flac", str(flac),
+            "-i", str(mixed), "-c:a", "flac", "-sample_fmt", "s32", "-bits_per_raw_sample", "24", str(flac),
         ], check=True, stdout=sys.stderr)
         flac.replace(destination)
 

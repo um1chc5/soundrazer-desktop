@@ -1,5 +1,5 @@
 import {AUDIO_EXTENSIONS} from '../constants.js';
-import {$, el, notice, stem, api, sep, projectUrl, jobRunning, token} from '../core.js';
+import {$, el, notice, stem, api, sep, projectUrl, jobPending, findJob, queueBusy, token} from '../core.js';
 import {store, nav} from '../store.js';
 import {pickerValue, pickerValid} from '../picker.js';
 import {renderProgress} from '../progress.js';
@@ -120,15 +120,19 @@ export function renderNew() {
   $('folder-default').hidden = !store.state.default_root || isDefault;
   const name = store.sourceMode === 'file' ? (store.chosenFile ? stem(store.chosenFile.name) : t('new.placeholderSongName')) : t('new.placeholderVideoTitle');
   $('output-preview').textContent = store.state.root ? `→ ${store.state.root}${sep()}${name}${sep()}stems` : '';
-  const youtube = store.state.job?.kind === 'youtube' ? store.state.job : null;
-  const showYt = !!youtube && (jobRunning() || (store.pending && store.pending.jobId === youtube.id) || youtube.status === 'failed' && store.pending?.failed === youtube.id);
+  // The YouTube import this page started (or any one still in the queue).
+  const pendingId = store.pending?.jobId || store.pending?.failed;
+  const youtube = (pendingId && findJob(pendingId)) || (store.state.jobs || []).find(j => j.kind === 'youtube') || null;
+  const showYt = !!youtube && (jobPending(youtube) || store.pending?.jobId === youtube.id || youtube.status === 'failed' && store.pending?.failed === youtube.id);
   $('yt-panel').hidden = !showYt;
   if (showYt) renderProgress($('yt-panel'), youtube);
   const ready = store.sourceMode === 'file' ? !!store.chosenFile : /^https?:\/\/\S+/.test($('youtube-url').value.trim());
-  $('start').disabled = !ready || !store.state.root || store.busy || !!jobRunning() || !pickerValid($('new-stems'));
-  $('start').textContent = jobRunning() && !store.busy ? t('start.anotherRunning') : store.busy ? t('start.starting') : t('start.button');
-  $('folder-open').disabled = store.busy || !!jobRunning();
-  $('folder-default').disabled = store.busy || !!jobRunning();
+  // A running job no longer blocks this page: the new one waits in the queue.
+  $('start').disabled = !ready || !store.state.root || store.busy || !pickerValid($('new-stems'));
+  $('start').textContent = store.busy ? t('start.starting') : queueBusy() ? t('start.addToQueue') : t('start.button');
+  // Queued jobs hold paths inside the current folder, so it stays put until they finish.
+  $('folder-open').disabled = store.busy || queueBusy();
+  $('folder-default').disabled = store.busy || queueBusy();
   renderNewTrim();
 }
 export function newFields() {
@@ -153,7 +157,7 @@ export function upload(file, data) {
   });
 }
 $('start').onclick = async () => {
-  if (store.busy || jobRunning()) return;
+  if (store.busy) return;
   if (store.state.setup?.required) { notice(t('setup.completeFirst'), 'error'); return; }
   store.newTrimEditor?.stopPreview();
   const choice = pickerValue($('new-stems'));
@@ -176,8 +180,8 @@ $('start').onclick = async () => {
   finally { store.busy = false; $('upload-box').hidden = true; renderNew(); }
 };
 export async function continuePending() {
-  const job = store.state.job;
-  if (!store.pending || !job || job.id !== store.pending.jobId) return;
+  const job = store.pending?.jobId && findJob(store.pending.jobId);
+  if (!job) return;
   if (job.status === 'succeeded' && job.project) {
     const {preset, stems} = store.pending; store.pending = null;
     $('youtube-url').value = '';

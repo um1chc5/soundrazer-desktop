@@ -47,10 +47,26 @@ function stemLabel(file, fallback) {
 function activeProject() { return store.state.projects.find(p => p.id === store.selected); }
 function activeJob() { return store.state.active_job ? store.state.jobs.find(j => j.id === store.state.active_job) : store.state.job; }
 function jobRunning() { const job = activeJob(); return !!job && ['running', 'cancelling'].includes(job.status); }
+// Queue-aware lookups: several jobs can be running or waiting at once.
+function jobPending(job) { return !!job && ['queued', 'running', 'cancelling'].includes(job.status); }
+function findJob(id) {
+  const {jobs = [], finished_jobs: finished = [], job} = store.state;
+  return jobs.find(j => j.id === id) || [...finished].reverse().find(j => j.id === id) || (job?.id === id ? job : null);
+}
+// The job to show on a song page: its running or queued job, else the latest finished one.
+function projectJob(id) {
+  const {jobs = [], finished_jobs: finished = [], job} = store.state;
+  const live = jobs.filter(j => j.project === id && j.kind !== 'youtube').sort((a, b) => a.position - b.position);
+  if (live.length) return live[0];
+  const done = [...finished].reverse().find(j => j.project === id && j.kind !== 'youtube');
+  return done || (job?.project === id && job.kind !== 'youtube' ? job : null);
+}
+function queueBusy() { return (store.state.jobs || []).length > 0; }
 function projectUrl(id) { return `/api/projects/${encodeURIComponent(id)}`; }
 function fields(prefix) {
   const data = Object.fromEntries(['title', 'artist', 'album', 'year'].map(key => [key, $(`${prefix}-${key}`).value]));
   if (store.lookupSelections[prefix]) data.lookup_token = store.lookupSelections[prefix];
   return data;
 }
-export {$, token, el, notice, time, duration, serverNow, setClockSkew, sep, stem, api, activeJob, activeProject, jobRunning, projectUrl, fields, stemLabel};
+export {$, token, el, notice, time, duration, serverNow, setClockSkew, sep, stem, api, activeJob, activeProject, jobRunning,
+  jobPending, findJob, projectJob, queueBusy, projectUrl, fields, stemLabel};

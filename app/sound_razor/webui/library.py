@@ -16,7 +16,7 @@ import time
 import uuid
 
 from ..projects import (atomic_json, describe_project, import_project, list_projects,
-                        project_path, save_metadata, cover_path, metadata_fields)
+                        project_path, save_metadata, cover_path, metadata_fields, stem_file)
 from ..projects.metadata import MetadataLookup
 from ..audio.sources import youtube_url, youtube_command
 from ..audio.pipeline import probe_duration, parse_trim
@@ -72,6 +72,11 @@ def clock_seconds(text: str):
     return total
 
 
+def public_job(job: dict) -> dict:
+    """A job record for the API: worker-only "_" fields hold Paths, which JSON can't encode."""
+    return {key: value for key, value in job.items() if not key.startswith("_")}
+
+
 class Library:
     def __init__(self, root: Path | None, config: Path, cache: Path, default_root: Path = Path("output"),
                  window=None):
@@ -95,6 +100,7 @@ class Library:
         self.active_jobs = {}        # job_id -> job record for active jobs
         self.processes = {}          # job_id -> subprocess.Popen
         self.job_logs = {}           # job_id -> deque(maxlen=160)
+        self.finished_jobs = deque(maxlen=20)  # recent finished records, for UI notices
         self._drainer = None         # coordinator thread that starts workers up to cap
         self._job_done = threading.Event()  # set when any active job finishes
         self.max_concurrent_jobs = self._derive_max_concurrent_jobs()
@@ -227,24 +233,25 @@ class Library:
                 job = self.active_jobs.get(job_id)
                 if not job:
                     continue
-                active = dict(job)
+                active = public_job(job)
                 active["position"] = 0
                 active["logs"] = list(self._job_logs(job_id))
                 jobs.append(active)
             for index, job in enumerate(self.queue, start=1):
-                record = dict(job)
+                record = public_job(job)
                 record["position"] = index
                 record["logs"] = list(self._job_logs(job["id"]))
                 jobs.append(record)
             # `job` shim: the most recently started active job so success/failure
             # notices still surface after workers exit.
-            job_shim = dict(self.job) if self.job else None
+            job_shim = public_job(self.job) if self.job else None
             return {"root": str(self.root) if self.root else None, "default_root": str(self.default_root),
                     "projects": list_projects(self.root) if self.root else [], "jobs": jobs,
                     "active_job": next(iter(self.active)) if self.active else None,
                     "active_jobs": [jid for jid in self.active],
                     "max_concurrent_jobs": self.max_concurrent_jobs,
                     "job": job_shim,
+                    "finished_jobs": [public_job(job) for job in self.finished_jobs],
                     "setup": self.setup_status(), "now": time.time()}
 
     def _track_progress(self, job: dict, line: str) -> bool:
@@ -282,7 +289,7 @@ class Library:
         """Append a queued job and start the drainer thread if it is not running."""
         self.queue.append(job)
         self._ensure_drainer()
-        return dict(job)
+        return public_job(job)
 
     def _ensure_drainer(self):
         if self._drainer is None or not self._drainer.is_alive():
@@ -302,8 +309,11 @@ class Library:
                     self.logs = deque(maxlen=160)
                     return
                 started = []
-                while self.queue and len(self.active) < self.max_concurrent_jobs:
-                    job = self.queue.pop(0)
+                while len(self.active) < self.max_concurrent_jobs:
+                    job = self._next_startable()
+                    if job is None:
+                        break
+                    self.queue.remove(job)
                     self.active.add(job["id"])
                     self.active_jobs[job["id"]] = job
                     job["status"] = "running"
@@ -321,6 +331,49 @@ class Library:
             for job in started:
                 thread = threading.Thread(target=self._run_job, args=(job,), daemon=True)
                 thread.start()
+
+    def _next_startable(self):
+        """First queued job that may start now, keeping FIFO order where it matters.
+
+        Setup runs alone: it reinstalls packages the other jobs import, and
+        setup_env reports through the single `self.job`/`self.logs`/`self.process`
+        aliases. Two jobs on one project never overlap, because each one swaps
+        the project's whole stems folder when it publishes.
+        """
+        active = self._active_jobs()
+        if any(job["kind"] == "setup" for job in active):
+            return None
+        busy = {job.get("project") for job in active if job.get("project")}
+        for job in self.queue:
+            if job["kind"] == "setup":
+                # Wait for running jobs to drain; nothing queued after setup jumps it.
+                return None if active else job
+            if job.get("project") and job["project"] in busy:
+                continue
+            return job
+        return None
+
+    def _finish(self, job: dict):
+        """Mark a worker's own job record finished. Caller holds the lock."""
+        if job["status"] == "cancelling":
+            job["status"] = "cancelled"
+        job["finished"] = time.time()
+        self.processes.pop(job["id"], None)
+        self.finished_jobs.append(job)
+        # Point the UI's single-job shim at the finished job unless another is still running,
+        # so its success/failure notice still surfaces.
+        others = [other for other in self._active_jobs() if other is not job]
+        if not others:
+            self.job = job
+
+    def _launch(self, job: dict, command, **options):
+        """Start a job's subprocess unless it is being cancelled. Caller holds the lock."""
+        if job["status"] == "cancelling":
+            return None
+        process = subprocess.Popen(command, **options)
+        self.processes[job["id"]] = process
+        self.process = process
+        return process
 
     def _run_job(self, job: dict):
         """Run a single job's worker, then signal completion and clean up."""
@@ -342,12 +395,12 @@ class Library:
                              job["_prevent_clipping"])
         finally:
             with self.lock:
+                if job["finished"] is None:
+                    self._finish(job)
                 self.active.discard(job_id)
                 self.active_jobs.pop(job_id, None)
-                self.processes.pop(job_id, None)
-                if self.process is job:
+                if not self.active:
                     self.process = None
-                    self.logs = deque(maxlen=160)
             self._job_done.set()
 
     # ---------------------------------------------------------------- start
@@ -362,13 +415,15 @@ class Library:
             if (project / "stems").is_symlink():
                 raise ValueError("The stems folder must not be a symlink.")
             if guitar_split:
-                if 'guitar.flac' not in {item['file'] for item in info['stems']}:
+                guitar = stem_file(project/'stems', 'guitar')
+                if guitar not in {item['file'] for item in info['stems']}:
                     raise ValueError('Separate the guitar track first.')
                 if any(p.is_symlink() or not p.is_file() for p in (project/'stems').iterdir()):
                     raise ValueError('The stems folder must contain regular files only.')
-                if any((project/'stems'/name).exists() for name in ('lead.flac', 'rhythm.flac')):
+                if any((project/'stems'/f'{name}{ext}').exists()
+                       for name in ('lead', 'rhythm') for ext in ('.flac', '.wav')):
                     raise ValueError('This project already contains lead or rhythm tracks.')
-                trim_source = project / 'stems' / 'guitar.flac'
+                trim_source = project / 'stems' / guitar
                 saved_trim = parse_trim(trim, probe_duration(trim_source), 2.0) if trim is not None else None
             else:
                 saved_trim = parse_trim(trim, probe_duration(project / info["original"]), 1.0) if trim is not None else None
@@ -431,23 +486,15 @@ class Library:
     # ---------------------------------------------------------------- workers
 
     def _setup(self, job, stages: list[str]):
-        job_id = job["id"]
         try:
             run_setup(self, stages)
         except Exception as error:
             with self.lock:
-                if self.job and self.job["id"] == job_id and self.job["status"] != "cancelling":
-                    self.job.update(status="failed", error=str(error))
+                if job["status"] != "cancelling":
+                    job.update(status="failed", error=str(error))
         finally:
             with self.lock:
-                if self.job and self.job["id"] == job_id and self.job["status"] == "cancelling":
-                    self.job["status"] = "cancelled"
-                if self.job and self.job["id"] == job_id:
-                    self.job["finished"] = time.time()
-                self.processes.pop(job_id, None)
-                if self.process is job:
-                    self.process = None
-                    self.logs = deque(maxlen=160)
+                self._finish(job)
 
     def _youtube(self, job, root, url, fields):
         job_id = job["id"]
@@ -455,28 +502,25 @@ class Library:
             with tempfile.TemporaryDirectory(prefix='.youtube-', dir=root) as temporary:
                 work = Path(temporary)
                 with self.lock:
-                    if self.job and self.job["id"] == job_id and self.job['status'] == 'cancelling':
-                        return
-                    self.process = subprocess.Popen(youtube_command(url, work), stdout=subprocess.PIPE,
+                    process = self._launch(job, youtube_command(url, work), stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT, text=True, errors='replace',
                         env=dict(os.environ, PYTHONUNBUFFERED='1'), start_new_session=True)
-                    self.processes[job_id] = self.process
-                    process = self.process
+                    if process is None:
+                        return
                 for line in process.stdout:
                     line = line.strip()
                     with self.lock:
-                        if self.job and self.job["id"] == job_id:
-                            download = YTDLP_PROGRESS.search(line)
-                            if download:
-                                self.job['progress'] = max(self.job['progress'], float(download.group(1)))
-                                self.job['eta'] = clock_seconds(download.group(2)) if download.group(2) else None
-                                self.job['eta_at'] = time.time()
-                            elif line:
-                                self._job_logs(job_id).append(line[-2000:])
+                        download = YTDLP_PROGRESS.search(line)
+                        if download:
+                            job['progress'] = max(job['progress'], float(download.group(1)))
+                            job['eta'] = clock_seconds(download.group(2)) if download.group(2) else None
+                            job['eta_at'] = time.time()
+                        elif line:
+                            self._job_logs(job_id).append(line[-2000:])
                 code = process.wait()
                 process.stdout.close()
                 with self.lock:
-                    if self.job and self.job["id"] == job_id and self.job['status'] == 'cancelling':
+                    if job['status'] == 'cancelling':
                         return
                     if code:
                         raise ValueError(f'YouTube download failed (exit {code}). See the download log.')
@@ -488,20 +532,14 @@ class Library:
                     chosen = {key: fields[key] or str(defaults[key])[:500] for key in defaults}
                     result = import_project(root, work/'source.wav', 'original.wav', chosen,
                                             origin={'provider': 'YouTube', 'url': url})
-                    self.job.update(status='succeeded', project=result['id'])
+                    job.update(status='succeeded', project=result['id'])
         except Exception as error:
             with self.lock:
-                if self.job and self.job["id"] == job_id and self.job['status'] != 'cancelling':
-                    self.job.update(status='failed', error=str(error))
+                if job['status'] != 'cancelling':
+                    job.update(status='failed', error=str(error))
         finally:
             with self.lock:
-                if self.job and self.job["id"] == job_id and self.job['status'] == 'cancelling':
-                    self.job['status'] = 'cancelled'
-                if self.job and self.job["id"] == job_id:
-                    self.job['finished'] = time.time()
-                self.processes.pop(job_id, None)
-                if self.process is job:
-                    self.process = None
+                self._finish(job)
 
     def _separate(self, job, project: Path, original: str, stems: list[str], guitar_split=False, trim=None):
         job_id = job["id"]
@@ -512,7 +550,7 @@ class Library:
                 if guitar_split:
                     shutil.copytree(project/'stems', stage)
                     command = [sys.executable, '-m', 'sound_razor', 'split-guitar',
-                               '--file', str(stage/'guitar.flac'), '--output', str(stage),
+                               '--file', str(stage/stem_file(stage, 'guitar')), '--output', str(stage),
                                '--cache', str(self.cache), *range_args]
                 else:
                     command = [sys.executable, "-m", "sound_razor", "separate", "--file", str(project / original),
@@ -520,22 +558,20 @@ class Library:
                                *range_args]
                 env = dict(os.environ, PYTHONUNBUFFERED="1", ORT_DISABLE_TELEMETRY="1")
                 with self.lock:
-                    if self.job and self.job["id"] == job_id and self.job["status"] == "cancelling":
+                    process = self._launch(job, command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                           text=True, errors="replace", env=env, start_new_session=True)
+                    if process is None:
                         return
-                    self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                                    text=True, errors="replace", env=env, start_new_session=True)
-                    self.processes[job_id] = self.process
-                    process = self.process
                 job_logs = self._job_logs(job_id)
                 for line in process.stdout:
                     line = line.strip()
                     with self.lock:
-                        if self.job and self.job["id"] == job_id and line and not self._track_progress(job, line):
+                        if line and not self._track_progress(job, line):
                             job_logs.append(line[-2000:])
                 code = process.wait()
                 process.stdout.close()
                 with self.lock:
-                    if self.job and self.job["id"] == job_id and self.job["status"] == "cancelling":
+                    if job["status"] == "cancelling":
                         return
                 if code != 0:
                     raise RuntimeError(f"Separation CLI exited with code {code}. See the process log.")
@@ -545,7 +581,7 @@ class Library:
                         raise RuntimeError(f"CLI did not produce {stem}.flac.")
                 # Publish only a successful run; preserve the old stems on failure.
                 with self.lock:
-                    if self.job and self.job["id"] == job_id and self.job["status"] == "cancelling":
+                    if job["status"] == "cancelling":
                         return
                     destination = project / "stems"
                     backup = Path(temporary) / "previous-stems"
@@ -557,20 +593,14 @@ class Library:
                         if backup.exists():
                             backup.rename(destination)
                         raise
-                    self.job.update(status="succeeded", progress=100, phase="done", eta=0)
+                    job.update(status="succeeded", progress=100, phase="done", eta=0)
         except Exception as error:
             with self.lock:
-                if self.job and self.job["id"] == job_id and self.job["status"] != "cancelling":
-                    self.job.update(status="failed", error=str(error))
+                if job["status"] != "cancelling":
+                    job.update(status="failed", error=str(error))
         finally:
             with self.lock:
-                if self.job and self.job["id"] == job_id and self.job["status"] == "cancelling":
-                    self.job["status"] = "cancelled"
-                if self.job and self.job["id"] == job_id:
-                    self.job["finished"] = time.time()
-                self.processes.pop(job_id, None)
-                if self.process is job:
-                    self.process = None
+                self._finish(job)
 
     def start_export(self, identifier: str, formats, stems, *, prevent_clipping=True):
         with self.lock:
@@ -616,42 +646,35 @@ class Library:
         try:
             def report(completed, total, label):
                 with self.lock:
-                    if not self.job or self.job["id"] != job_id or self.job["status"] == "cancelling":
+                    if job["status"] == "cancelling":
                         raise RuntimeError("Export cancelled.")
                     fraction = completed / total if total else 0
-                    self.job["phase"] = "finalize" if completed >= total else "export"
-                    self.job["progress"] = max(2, min(96, 2 + fraction * 93))
+                    job["phase"] = "finalize" if completed >= total else "export"
+                    job["progress"] = max(2, min(96, 2 + fraction * 93))
                     if fraction > 0.02:
-                        self.job["eta"] = (time.time() - self.job["started"]) / fraction + 1
-                        self.job["eta_at"] = time.time()
+                        job["eta"] = (time.time() - job["started"]) / fraction + 1
+                        job["eta_at"] = time.time()
 
             def set_process(process):
                 with self.lock:
-                    if self.job and self.job["id"] == job_id:
-                        if process is not None and self.job["status"] == "cancelling":
-                            process.terminate()
-                        self.process = process
-                        self.processes[job_id] = self.process
+                    if process is not None and job["status"] == "cancelling":
+                        process.terminate()
+                    if process is None:
+                        self.processes.pop(job_id, None)
+                    else:
+                        self.processes[job_id] = process
 
             export_stems(project, stems, formats, prevent_clipping, report, set_process)
             with self.lock:
-                if self.job and self.job["id"] == job_id and self.job["status"] == "cancelling":
-                    return
-                if self.job and self.job["id"] == job_id:
-                    self.job.update(status="succeeded", progress=100, phase="done", eta=0)
+                if job["status"] != "cancelling":
+                    job.update(status="succeeded", progress=100, phase="done", eta=0)
         except Exception as error:
             with self.lock:
-                if self.job and self.job["id"] == job_id and self.job["status"] != "cancelling":
-                    self.job.update(status="failed", error=str(error))
+                if job["status"] != "cancelling":
+                    job.update(status="failed", error=str(error))
         finally:
             with self.lock:
-                if self.job and self.job["id"] == job_id and self.job["status"] == "cancelling":
-                    self.job["status"] = "cancelled"
-                if self.job and self.job["id"] == job_id:
-                    self.job["finished"] = time.time()
-                self.processes.pop(job_id, None)
-                if self.process is job:
-                    self.process = None
+                self._finish(job)
 
     # ---------------------------------------------------------------- delete / cancel
 
@@ -672,6 +695,14 @@ class Library:
                 self.logs.clear()
             return {"ok": True}
 
+    def _process_for(self, job: dict):
+        """A job's subprocess. setup_env only sets the `process` alias, which is safe
+        to use for setup because setup always runs alone. Caller holds the lock."""
+        process = self.processes.get(job["id"])
+        if process is None and job["kind"] == "setup":
+            process = self.process
+        return process
+
     def cancel(self, job_id: str | None = None):
         processes_to_wait = []
         with self.lock:
@@ -682,7 +713,7 @@ class Library:
                     target = self.active_jobs.get(job_id)
                     if target:
                         target["status"] = "cancelling"
-                        proc = self.processes.get(job_id)
+                        proc = self._process_for(target)
                         if proc:
                             processes_to_wait.append(proc)
                             if proc.poll() is None:
@@ -710,7 +741,7 @@ class Library:
                     target = self.active_jobs.get(jid)
                     if target:
                         target["status"] = "cancelling"
-                    proc = self.processes.get(jid)
+                    proc = self._process_for(target) if target else None
                     if proc and proc.poll() is None:
                         processes_to_wait.append(proc)
                         try:

@@ -1,4 +1,4 @@
-import {$, el, jobRunning, notice} from '../core.js';
+import {$, el, jobPending, projectJob, notice} from '../core.js';
 import {store, nav} from '../store.js';
 import {coverImage} from '../covers.js';
 import {t} from '../i18n.js';
@@ -15,9 +15,10 @@ export function renderLibrary() {
     art.style.setProperty('--h', [...project.id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7));
     art.append(el('span', 'card-initial', (project.title || '?').trim().charAt(0).toUpperCase()));
     coverImage(art, project);
-    const job = store.state.job;
+    const job = projectJob(project.id);
     let badge;
-    if (job && job.project === project.id && jobRunning()) badge = el('span', 'badge badge-live', t('library.processing', {pct: Math.floor(job.progress || 0)}));
+    if (job?.status === 'queued') badge = el('span', 'badge badge-live', t('library.queued'));
+    else if (jobPending(job)) badge = el('span', 'badge badge-live', t('library.processing', {pct: Math.floor(job.progress || 0)}));
     else if (project.stems.length) badge = el('span', 'badge badge-ok', t('library.stemsCount', {count: project.stems.length}));
     else badge = el('span', 'badge', t('library.notSeparated'));
     const text = el('span', 'card-text');

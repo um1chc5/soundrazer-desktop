@@ -173,6 +173,10 @@ def main():
             min_size=(MIN_WIDTH, MIN_HEIGHT),
             resizable=True,
             frameless=True,
+            # pywebview's easy_drag moves a frameless window on a mousedown anywhere, so
+            # dragging a volume slider or trim handle dragged the whole app. Our own title
+            # bar (.titlebar-drag in window.js) is the only drag area.
+            easy_drag=False,
             background_color="#0b0c0f",
         )
         controls.attach(window)

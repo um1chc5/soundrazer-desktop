@@ -155,3 +155,14 @@
 #notice[data-kind=success]::before { background: var(--success); }
 @keyframes toast { from { opacity: 0; transform: translateY(8px); } }
 
+
+/* Job queue dialog */
+.queue-list { list-style: none; display: flex; flex-direction: column; gap: 8px; max-height: min(420px, 60vh); overflow-y: auto; }
+.queue-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); }
+.queue-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.queue-text strong { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue-text small { font-size: 12px; color: var(--text-2); }
+.queue-bar { height: 3px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.queue-bar i { display: block; height: 100%; background: var(--accent); transition: width .4s ease; }
+.queue-waiting .queue-bar { visibility: hidden; }
+.queue-actions { display: flex; gap: 6px; flex-shrink: 0; }

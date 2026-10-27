@@ -43,6 +43,7 @@
 .new-head .page-sub { max-width: 60ch; }
 .new-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 .source-card { display: flex; flex-direction: column; gap: 16px; }
+.source-card .trim-section { margin-top: 0; padding-top: 16px; border-top: 1px solid var(--line); }
 .source-card .card-step { margin-bottom: 0; }
 
 .segmented { margin-left: auto; display: flex; padding: 3px; gap: 2px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }

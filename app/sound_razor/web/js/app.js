@@ -7,7 +7,7 @@ import './dialogs.js';
 import './folders.js';
 import './lookup.js';
 import {nav} from './store.js';
-import {jobRunning, notice} from './core.js';
+import {queueBusy, notice} from './core.js';
 import {animate} from './audio.js';
 import {t} from './i18n.js';
 import {initLangToggle} from './lang-toggle.js';
@@ -21,6 +21,6 @@ initLangToggle();
 
 async function poll() {
   try { await nav.refresh(); } catch (error) { notice(t('nav.connectionProblem', {error: error.message}), 'error'); }
-  setTimeout(poll, jobRunning() ? 1000 : 2500);
+  setTimeout(poll, queueBusy() ? 1000 : 2500);
 }
 poll(); animate();
