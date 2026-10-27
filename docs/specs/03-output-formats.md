@@ -41,6 +41,13 @@ Rejected alternatives:
 | Convert `stems/` in place | Destroys the lossless source, breaks guitar split, stacks generation loss on every re-export. |
 | Export the original recording too | Out of scope for this pass; the original is already a normal file in the project folder. |
 
+**Revisit (see [07 — Disk usage](07-disk-usage.md)):** "canonical format" above
+means *not re-encoded to a lossy format*, not "must be the WAV container." FLAC is
+lossless and ~40–50% smaller than WAV for the same PCM data, so switching the
+canonical container to FLAC does not conflict with this decision — only the
+rejected alternatives (asking the separator for lossy output, or converting
+`stems/` to a lossy format in place) are ruled out here.
+
 ## 3. User-facing behaviour
 
 - A new **Export** button in the song header, next to *Open folder* / *Edit* /

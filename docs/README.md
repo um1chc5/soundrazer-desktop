@@ -15,6 +15,9 @@
   - [02 — Pre-separation trim](specs/02-pre-separation-trim.md)
   - [03 — Output formats](specs/03-output-formats.md)
   - [04 — First-run setup](specs/04-first-run-setup.md)
+  - [05 — Job queue and concurrency](specs/05-job-queue.md)
+  - [06 — Close behavior](specs/06-close-behavior.md)
+  - [07 — Disk usage and cache](specs/07-disk-usage.md)
 
 ## Handoff
 
