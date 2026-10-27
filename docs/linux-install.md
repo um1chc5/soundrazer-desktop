@@ -1,0 +1,139 @@
+# Linux Install Guide
+
+SoundRazer Desktop runs on Linux from the same source as the Windows build. There
+is no `.exe` and no installer wizard — Linux installs with a script that sets up a
+virtual environment and a desktop entry, the same way the Windows
+`bootstrap.ps1` sets one up on Windows.
+
+## Quick install
+
+```bash
+git clone https://github.com/um1chc5/soundrazer-desktop.git
+cd soundrazer-desktop
+./installer/install-linux.sh
+```
+
+Then start it from your applications menu, or run:
+
+```bash
+soundrazer
+```
+
+On first launch the app opens its own setup screen and offers to download FFmpeg
+and the separation engine (~1.7 GB) — exactly like the Windows build. Library and
+Separate stay disabled until you approve that download.
+
+### Installer options
+
+| Command | Effect |
+|---|---|
+| `./installer/install-linux.sh` | Install to `~/.local/share/soundrazer` (default) |
+| `--prefix DIR` | Install somewhere else |
+| `--full` | Also download PyTorch/audio-separator now instead of on first launch |
+| `--no-deps` | Copy code only; skip `pip install` (fast re-install of app changes) |
+| `--uninstall` | Remove the app, launcher and menu entry |
+| `--help` | Show usage |
+
+## Requirements
+
+- **Python 3.11 or newer**
+- **`uv`** (recommended) or the standard `venv` module — the script falls back to
+  `python -m venv` if `uv` is missing
+- **GTK 3 + WebKit2** for the native window (see below)
+- ~10 GB free space once models and dependencies are downloaded
+
+### Native window prerequisites
+
+The app opens in a native window via [pywebview](https://pywebview.flowrl.com/),
+which on Linux uses GTK 3 and WebKit2 through `gi`. These are system packages that
+**cannot** be installed with `pip`, so install them with your package manager:
+
+```bash
+# Debian / Ubuntu / Linux Mint
+sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.1
+
+# Fedora
+sudo dnf install python3-gobject gtk3 webkit2gtk4.1
+
+# Arch / Manjaro
+sudo pacman -S python-gobject gtk3 webkit2gtk-4.1
+```
+
+> **On older distros** (Debian 11, Ubuntu 20.04) the WebKit package is named
+> `gir1.2-webkit2-4.0` instead of `-4.1`; pywebview supports both.
+
+If these packages are missing the app still runs — it just falls back to opening
+in your default browser. To force that deliberately:
+
+```bash
+SOUNDRAZER_BROWSER=1 soundrazer
+```
+
+## Where things go
+
+| Path | Contents |
+|---|---|
+| `~/.local/share/soundrazer` | The app itself and its `.venv` |
+| `~/.local/bin/soundrazer` | Launcher script |
+| `~/.local/share/applications/soundrazer.desktop` | Menu entry |
+| `~/.local/share/icons/soundrazer.png` | Icon |
+| `~/.local/share/soundrazer-desktop/ui.json` | Your last-used projects folder |
+| `~/.cache/soundrazer-desktop/models` | Downloaded AI models (~455 MB) |
+| `~/Music/SoundRazer Desktop` | Your separated songs (the default projects folder) |
+
+FFmpeg, once downloaded by the first-run setup, lands next to the app in
+`~/.local/share/soundrazer/`.
+
+## Uninstall
+
+```bash
+./installer/install-linux.sh --uninstall
+```
+
+This removes the app, the launcher and the menu entry. It deliberately **keeps**
+your models, settings and separated songs — delete these by hand for a clean
+slate:
+
+```bash
+rm -rf ~/.local/share/soundrazer-desktop ~/.cache/soundrazer-desktop \
+       ~/Music/"SoundRazer Desktop"
+```
+
+## Troubleshooting
+
+**The app opens in a browser instead of a window.**
+The GTK/WebKit system packages above are missing, or the venv can't see them. The
+installer creates the venv with `--system-site-packages` for this reason — check
+it with:
+
+```bash
+~/.local/share/soundrazer/.venv/bin/python -c \
+  "import gi; gi.require_version('WebKit2','4.1'); from gi.repository import WebKit2; print('ok')"
+```
+
+If that fails, install the packages and re-run the installer.
+
+**"FFmpeg was not found."**
+Run the app's first-run setup, or install FFmpeg from your distro
+(`sudo apt install ffmpeg`) and reopen the app.
+
+**Automatic FFmpeg setup fails on ARM.**
+The static FFmpeg build the app downloads is x86-64 only. On arm64, install FFmpeg
+with your package manager instead — the app finds it on `PATH`.
+
+**`soundrazer: command not found`.**
+`~/.local/bin` isn't on your `PATH`. Either add it, or launch with the full path
+`~/.local/bin/soundrazer`.
+
+## Notes for maintainers
+
+- The Linux installer is the counterpart to `installer/bootstrap.ps1` (dependency
+  setup) plus `installer/SoundRazer.nsis` (launcher, menu entry, uninstall). NSIS
+  has no Linux equivalent here because there's no prebuilt Python runtime to ship;
+  the script builds a venv instead.
+- `app/sound_razor/setup_env.py` picks the FFmpeg archive per platform — the
+  gyan.dev `.zip` on Windows, the johnvansickle static `.tar.xz` on Linux — and
+  sets the executable bit after extracting the tarball.
+- `installer/SoundRazer.nsis` reads the app from `app/` and the packaging metadata
+  from the repo root's `pyproject.toml`; `install-linux.sh` mirrors that layout so
+  both installers stay in sync with one source tree.

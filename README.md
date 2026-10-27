@@ -51,6 +51,24 @@ uv pip install --python .venv/Scripts/python.exe -e ".[full]"
 .\.venv\Scripts\soundrazer.exe
 ```
 
+## Linux
+
+SoundRazer Desktop also runs on Linux (x86-64). Install it with the bundled script:
+
+```bash
+git clone https://github.com/um1chc5/soundrazer-desktop.git
+cd soundrazer-desktop
+./installer/install-linux.sh
+soundrazer
+```
+
+It needs Python 3.11+, `uv` (or `venv`), and GTK 3 + WebKit2 for the native window
+(`python3-gi`, `gir1.2-gtk-3.0`, `gir1.2-webkit2-4.1` on Debian/Ubuntu). The
+installer writes a launcher and a menu entry, and the app downloads FFmpeg and the
+separation engine on first launch, just like the Windows build. See
+[docs/linux-install.md](docs/linux-install.md) for the full guide, uninstall steps
+and troubleshooting.
+
 ## System Requirements
 
 - **OS**: Windows 10/11 (64-bit)

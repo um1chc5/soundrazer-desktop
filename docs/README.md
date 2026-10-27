@@ -6,6 +6,7 @@
 - [architecture.md](architecture.md) — Core architecture, module responsibilities, data flow
 - [tech-stack.md](tech-stack.md) — Technologies used and alternatives considered
 - [desktop-app.md](desktop-app.md) — Desktop packaging plan (Inno Setup + pywebview)
+- [linux-install.md](linux-install.md) — Linux install guide, launcher, uninstall, troubleshooting
 
 ## Specs
 
