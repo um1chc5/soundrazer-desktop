@@ -1,4 +1,4 @@
-import {$, el, activeProject, jobRunning, api, notice, projectUrl} from '../core.js';
+import {$, el, activeProject, jobRunning, api, notice, projectUrl, stemLabel} from '../core.js';
 import {store, nav} from '../store.js';
 import {renderProgress} from '../progress.js';
 import {pickerValue, pickerValid} from '../picker.js';
@@ -6,6 +6,7 @@ import {loadAudio, player} from '../audio.js';
 import {coverImage} from '../covers.js';
 import {ORIGINAL_FILE, EXPORT_FORMATS} from '../constants.js';
 import {TrimEditor, trimRequest, sectionText, formatClock} from '../trim.js';
+import {t} from '../i18n.js';
 function storedTrim(project, duration) {
   const trim = project.separation?.trim;
   if (!trim || typeof trim !== 'object') return null;
@@ -26,7 +27,7 @@ function renderSongChip() {
   }
   chip.hidden = false;
   chip.append(el('span', '', sectionText(range)));
-  const clear = el('button', 'text-button', 'Clear');
+  const clear = el('button', 'text-button', t('common.clear'));
   clear.type = 'button';
   clear.onclick = () => store.songTrimEditor?.setRange(0, duration);
   chip.append(clear);
@@ -47,7 +48,7 @@ function renderSongTrim(project) {
   const original = player.tracks.find(track => track.file === ORIGINAL_FILE);
   if (!original?.buffer) {
     $('song-trim-chip').hidden = true;
-    if (!store.songTrimEditor) $('song-trim-editor').textContent = 'Loading the original waveform…';
+    if (!store.songTrimEditor) $('song-trim-editor').textContent = t('loading.originalWaveform');
     return;
   }
   const duration = original.buffer.duration;
@@ -72,7 +73,7 @@ function renderSongTrim(project) {
   store.songTrimKey = key;
   renderSongChip();
 }
-function exportOptions(host, items, checked, kind) {
+function exportOptions(host, items, checked, kind, translate) {
   host.replaceChildren(...items.map(([value, title, sub]) => {
     const label = el('label', `export-option export-${kind}`);
     const input = el('input');
@@ -80,7 +81,7 @@ function exportOptions(host, items, checked, kind) {
     input.value = value;
     input.checked = checked(value);
     const text = el('span', 'export-option-text');
-    text.append(el('strong', '', title), el('small', '', sub || ''));
+    text.append(el('strong', '', translate ? t(title) : title), el('small', '', (translate ? t(sub || '') : sub) || ''));
     label.append(input, text);
     return label;
   }));
@@ -88,8 +89,8 @@ function exportOptions(host, items, checked, kind) {
 function openExportDialog(success = false) {
   const project = activeProject();
   if (!project) return;
-  exportOptions($('export-formats'), EXPORT_FORMATS, value => value === 'flac', 'format');
-  exportOptions($('export-stems'), project.stems.map(item => [item.file, item.name, '']), () => true, 'stem');
+  exportOptions($('export-formats'), EXPORT_FORMATS, value => value === 'flac', 'format', true);
+  exportOptions($('export-stems'), project.stems.map(item => [item.file, stemLabel(item.file, item.name), '']), () => true, 'stem', false);
   const syncExportSubmit = () => {
     const formats = $('export-formats').querySelectorAll('input:checked').length;
     const stems = $('export-stems').querySelectorAll('input:checked').length;
@@ -108,7 +109,7 @@ function openExportDialog(success = false) {
   const sectionLength = end > start ? end - start : Math.max(0, Number(trim?.end) - Number(trim?.start) || 0);
   $('export-section-note').hidden = !sectioned;
   $('export-section-note').textContent = sectioned
-    ? `These stems are a ${sectionLength.toFixed(1)} s section starting at ${formatClock(sectionStart, 1)}.` : '';
+    ? t('export.sectionNote', {length: sectionLength.toFixed(1), start: formatClock(sectionStart, 1)}) : '';
   $('export-success').hidden = !success;
   $('export-reveal').hidden = !success;
   $('export-clipping').checked = true;
@@ -123,9 +124,9 @@ export function renderSong() {
   if (store.view !== 'song' || !project) return;
   $('title').textContent = project.title;
   coverImage(document.querySelector('.record-art'), project);
-  $('artist').textContent = project.artist || 'Unknown artist';
+  $('artist').textContent = project.artist || t('common.unknownArtist');
   $('album').textContent = [project.album, project.year].filter(Boolean).join(' · ');
-  $('source-name').textContent = project.original || 'No original file';
+  $('source-name').textContent = project.original || t('song.noOriginalFile');
   $('project-warning').textContent = project.warnings.join(' ');
   $('project-warning').hidden = !project.warnings.length;
   const job = store.state.job;
@@ -139,16 +140,16 @@ export function renderSong() {
   $('mixer').hidden = !showPlayer;
   $('transport').hidden = !showPlayer;
   document.querySelector('.mixer .panel-sub').textContent = hasStems
-    ? 'Balance, mute and solo each stem — including the original, for comparison.'
-    : 'Preview the original recording before choosing stems.';
+    ? t('mixer.subWithOriginal')
+    : t('mixer.subPreviewOriginal');
   $('resep-panel').hidden = busyHere || (hasStems && !store.resepOpen);
   $('resep-close').hidden = !hasStems;
-  $('resep-title').textContent = hasStems ? 'Separate again' : 'Separate this song';
+  $('resep-title').textContent = hasStems ? t('song.separateAgain') : t('song.separateThisSong');
   $('separation-description').textContent = hasStems
-    ? 'A successful rerun replaces this song’s current stems.'
-    : 'This song hasn’t been split yet. Choose stems and start.';
+    ? t('song.rerunReplaces')
+    : t('song.notSeparatedYet');
   $('separate').disabled = !project.original || !!jobRunning() || !pickerValid($('song-stems'));
-  $('separate').textContent = jobRunning() && !busyHere ? 'Another job is running…' : hasStems ? 'Separate again' : 'Separate stems';
+  $('separate').textContent = jobRunning() && !busyHere ? t('start.anotherRunning') : hasStems ? t('song.separateAgain') : t('song.separateStemsButton');
   $('delete-open').disabled = !!busyHere;
   $('resep-open').disabled = !!jobRunning();
   $('export-open').disabled = !hasStems || !!jobRunning();
@@ -193,8 +194,8 @@ $('export-form').onsubmit = async event => {
   if (!store.selected || jobRunning()) return;
   const formats = [...$('export-formats').querySelectorAll('input:checked')].map(input => input.value);
   const stems = [...$('export-stems').querySelectorAll('input:checked')].map(input => input.value);
-  if (!formats.length) { $('export-error').textContent = 'Choose at least one format.'; return; }
-  if (!stems.length) { $('export-error').textContent = 'Choose at least one stem.'; return; }
+  if (!formats.length) { $('export-error').textContent = t('export.chooseFormat'); return; }
+  if (!stems.length) { $('export-error').textContent = t('export.chooseStem'); return; }
   $('export-submit').disabled = true;
   try {
     const job = await api(`${projectUrl(store.selected)}/export`, {

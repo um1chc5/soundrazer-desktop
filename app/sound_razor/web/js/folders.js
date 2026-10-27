@@ -1,5 +1,6 @@
 import {$, el, api, notice} from './core.js';
 import {store, nav} from './store.js';
+import {t} from './i18n.js';
 /* ---------- output folder ---------- */
 export async function browse(path) {
   const data = await api(`/api/folders?path=${encodeURIComponent(path || '')}`);
@@ -10,7 +11,7 @@ export async function browse(path) {
     button.onclick = () => browse(folder.path).catch(e => $('folder-error').textContent = e.message);
     $('folder-children').append(button);
   }
-  if (!data.folders.length) $('folder-children').append(el('p', '', 'No subfolders. You can select this folder.'));
+  if (!data.folders.length) $('folder-children').append(el('p', '', t('folders.noSubfolders')));
 }
 export function openFolder() {
   $('folder-error').textContent = ''; $('create-folder').checked = false;
@@ -20,7 +21,7 @@ export function openFolder() {
 $('folder-open').onclick = openFolder;
 $('library-folder').onclick = openFolder;
 $('folder-default').onclick = async () => {
-  try { await api('/api/library', {path: store.state.default_root, create: true}); await nav.refresh(); notice('Saving to the default output folder.'); }
+  try { await api('/api/library', {path: store.state.default_root, create: true}); await nav.refresh(); notice(t('folders.savingDefault')); }
   catch (error) { notice(error.message, 'error'); }
 };
 $('browse-path').onclick = () => browse($('folder-path').value).catch(e => $('folder-error').textContent = e.message);

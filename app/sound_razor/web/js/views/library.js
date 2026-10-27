@@ -1,9 +1,10 @@
 import {$, el, jobRunning, notice} from '../core.js';
 import {store, nav} from '../store.js';
 import {coverImage} from '../covers.js';
+import {t} from '../i18n.js';
 /* ---------- library ---------- */
 export function renderLibrary() {
-  $('library-folder').textContent = store.state.root || 'no folder';
+  $('library-folder').textContent = store.state.root || t('library.noFolderLower');
   if (store.view !== 'library') return;
   const list = $('library'); list.replaceChildren();
   const query = $('search').value.toLowerCase();
@@ -16,20 +17,20 @@ export function renderLibrary() {
     coverImage(art, project);
     const job = store.state.job;
     let badge;
-    if (job && job.project === project.id && jobRunning()) badge = el('span', 'badge badge-live', `Processing ${Math.floor(job.progress || 0)}%`);
-    else if (project.stems.length) badge = el('span', 'badge badge-ok', `${project.stems.length} stems`);
-    else badge = el('span', 'badge', 'Not separated');
+    if (job && job.project === project.id && jobRunning()) badge = el('span', 'badge badge-live', t('library.processing', {pct: Math.floor(job.progress || 0)}));
+    else if (project.stems.length) badge = el('span', 'badge badge-ok', t('library.stemsCount', {count: project.stems.length}));
+    else badge = el('span', 'badge', t('library.notSeparated'));
     const text = el('span', 'card-text');
-    text.append(el('strong', '', project.title), el('small', '', project.artist || 'Unknown artist'));
+    text.append(el('strong', '', project.title), el('small', '', project.artist || t('common.unknownArtist')));
     card.append(art, text, badge);
     card.onclick = () => nav.selectProject(project.id);
     list.append(card);
   }
   if (!projects.length) {
     const empty = el('div', 'empty');
-    empty.append(el('strong', '', query ? 'No matching songs' : 'No songs yet'),
-      el('p', '', query ? 'Try a different search.' : 'Separate your first song and it will appear here.'));
-    if (!query) { const go = el('button', 'btn btn-primary btn-sm', 'Separate a song'); go.onclick = () => nav.show('new'); empty.append(go); }
+    empty.append(el('strong', '', query ? t('library.noMatching') : t('library.noSongsYet')),
+      el('p', '', query ? t('library.tryDifferentSearch') : t('library.separateFirstSong')));
+    if (!query) { const go = el('button', 'btn btn-primary btn-sm', t('library.separateASong')); go.onclick = () => nav.show('new'); empty.append(go); }
     list.append(empty);
   }
 }

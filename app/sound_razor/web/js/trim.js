@@ -1,4 +1,5 @@
 import {el} from './core.js';
+import {t} from './i18n.js';
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 
@@ -15,15 +16,15 @@ function spokenTime(seconds) {
   const minutes = Math.floor(seconds / 60);
   const rest = seconds % 60;
   const parts = [];
-  if (minutes) parts.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
-  parts.push(`${rest} second${rest === 1 ? '' : 's'}`);
+  if (minutes) parts.push(t(minutes === 1 ? 'time.minute' : 'time.minutes', {n: minutes}));
+  parts.push(t(rest === 1 ? 'time.second' : 'time.seconds', {n: rest}));
   return parts.join(' ');
 }
 
 export function sectionText(range, offset = 0) {
   const start = range.start + offset;
   const end = range.end + offset;
-  return `Section ${formatClock(start, 1)} – ${formatClock(end, 1)} (${(range.end - range.start).toFixed(1)} s)`;
+  return t('trim.sectionText', {start: formatClock(start, 1), end: formatClock(end, 1), length: (range.end - range.start).toFixed(1)});
 }
 
 export function trimRequest(range, duration) {
@@ -44,7 +45,7 @@ export class TrimEditor {
     if (this.end <= this.start) this.end = this.duration;
     this.onChange = options.onChange || (() => {});
     this.onPreview = options.onPreview || null;
-    this.hint = options.hint || 'Drag the handles, or type exact times.';
+    this.hint = options.hint || t('trim.hintDefault');
     this.abort = new AbortController();
     this.previewSource = null;
     this.previewContext = null;
@@ -65,8 +66,8 @@ export class TrimEditor {
     this.dimLeft = el('div', 'trim-dim trim-dim-left');
     this.dimRight = el('div', 'trim-dim trim-dim-right');
     this.selection = el('div', 'trim-selection');
-    this.startHandle = this.handle('Section start');
-    this.endHandle = this.handle('Section end');
+    this.startHandle = this.handle(t('trim.dragStart'));
+    this.endHandle = this.handle(t('trim.dragEnd'));
     this.playhead = el('span', 'trim-playhead');
     this.playhead.hidden = true;
     this.wave.append(this.canvas, this.dimLeft, this.dimRight, this.selection,
@@ -82,24 +83,24 @@ export class TrimEditor {
     this.startRead = el('span', 'trim-readout-value');
     this.endRead = el('span', 'trim-readout-value');
     this.lengthRead = el('span', 'trim-readout-value');
-    for (const [label, node] of [['Start', this.startRead], ['End', this.endRead], ['Length', this.lengthRead]]) {
+    for (const [label, node] of [[t('trim.start'), this.startRead], [t('trim.end'), this.endRead], [t('trim.length'), this.lengthRead]]) {
       const block = el('div', 'trim-readout-block');
       block.append(el('span', 'trim-readout-label', label), node);
       readouts.append(block);
     }
 
     const fields = el('div', 'trim-fields');
-    const startLabel = el('label', 'trim-field', 'Start');
-    this.startInput = this.numberInput('Section start in project time');
+    const startLabel = el('label', 'trim-field', t('trim.start'));
+    this.startInput = this.numberInput(t('trim.startAriaLabel'));
     startLabel.append(this.startInput);
-    const endLabel = el('label', 'trim-field', 'End');
-    this.endInput = this.numberInput('Section end in project time');
+    const endLabel = el('label', 'trim-field', t('trim.end'));
+    this.endInput = this.numberInput(t('trim.endAriaLabel'));
     endLabel.append(this.endInput);
     const actions = el('div', 'trim-actions');
-    this.fullButton = el('button', 'btn btn-ghost btn-sm', 'Full song');
+    this.fullButton = el('button', 'btn btn-ghost btn-sm', t('trim.fullSong'));
     this.fullButton.type = 'button';
     this.fullButton.onclick = () => this.setRange(0, this.duration);
-    this.previewButton = el('button', 'btn btn-ghost btn-sm', 'Preview');
+    this.previewButton = el('button', 'btn btn-ghost btn-sm', t('trim.preview'));
     this.previewButton.type = 'button';
     this.previewButton.disabled = !this.buffer;
     this.previewButton.onclick = () => this.togglePreview();
@@ -227,7 +228,7 @@ export class TrimEditor {
       node.setAttribute('aria-valuemin', '0');
       node.setAttribute('aria-valuemax', this.duration.toFixed(3));
       node.setAttribute('aria-valuenow', value.toFixed(3));
-      node.setAttribute('aria-valuetext', `${name === 'start' ? 'Start' : 'End'} at ${spokenTime(value + this.displayOffset)}`);
+      node.setAttribute('aria-valuetext', t(name === 'start' ? 'trim.startAt' : 'trim.endAt', {time: spokenTime(value + this.displayOffset)}));
     }
     this.startRead.textContent = formatClock(this.start + this.displayOffset);
     this.endRead.textContent = formatClock(this.end + this.displayOffset);
@@ -292,7 +293,7 @@ export class TrimEditor {
       source.onended = () => this.stopPreview();
       source.start(0, this.start, this.end - this.start);
       this.previewSource = source;
-      this.previewButton.textContent = 'Stop';
+      this.previewButton.textContent = t('trim.stop');
       this.playhead.hidden = false;
       const started = this.previewContext.currentTime;
       const tick = () => {
@@ -316,7 +317,7 @@ export class TrimEditor {
       try { source.stop(); } catch (_) { /* already ended */ }
       source.disconnect();
     }
-    this.previewButton.textContent = 'Preview';
+    this.previewButton.textContent = t('trim.preview');
     this.playhead.hidden = true;
   }
 

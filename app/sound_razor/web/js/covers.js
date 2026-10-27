@@ -1,5 +1,6 @@
 import {store} from './store.js';
 import {$, token, el, projectUrl} from './core.js';
+import {t} from './i18n.js';
 export async function coverImage(container, project) {
   const key = JSON.stringify([store.state.root, project.id, project.cover]);
   if (container.dataset.coverKey === key) return;
@@ -9,7 +10,7 @@ export async function coverImage(container, project) {
   const root = store.state.root;
   if (!store.coverImages.has(key)) {
     store.coverImages.set(key, fetch(`${projectUrl(project.id)}/cover?${new URLSearchParams({root})}`, {headers: {'X-sound-razor-Token': token}})
-      .then(r => { if (!r.ok) throw new Error('Cover unavailable'); return r.blob(); })
+      .then(r => { if (!r.ok) throw new Error(t('covers.unavailable')); return r.blob(); })
       .then(blob => URL.createObjectURL(blob)).catch(() => { store.coverImages.delete(key); return null; }));
     if (store.coverImages.size > 64) {
       const oldest = store.coverImages.keys().next().value;

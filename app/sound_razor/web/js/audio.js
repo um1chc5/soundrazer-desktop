@@ -1,9 +1,10 @@
 import {colors, ORIGINAL_COLOR, STEMS, ORIGINAL_FILE} from './constants.js';
-import {$, el, token, time, notice, jobRunning, projectUrl} from './core.js';
+import {$, el, token, time, notice, jobRunning, projectUrl, stemLabel} from './core.js';
 import {store} from './store.js';
 import {StemPlayer} from './player.js';
 import {openSplitDialog} from './split.js';
 import {formatClock} from './trim.js';
+import {t, onLangChange} from './i18n.js';
 export const player = new StemPlayer();
 player.onError = error => notice(error.message);
 export function clearAudio() {
@@ -57,11 +58,11 @@ export function buildLoadItems(project, root) {
   // loadAudio) once they exist, and is the only track when they don't yet, so the song
   // can be previewed before choosing what to separate.
   if (project.original) {
-    items.push({name: 'Original', file: ORIGINAL_FILE, offset: 0,
+    items.push({name: t('track.original'), file: ORIGINAL_FILE, offset: 0,
       url: `${projectUrl(project.id)}/original?${new URLSearchParams({root})}`});
   }
   for (const item of project.stems) {
-    items.push({...item, url: `${projectUrl(project.id)}/audio/${encodeURIComponent(item.file)}?${new URLSearchParams({root})}`});
+    items.push({...item, name: stemLabel(item.file, item.name), url: `${projectUrl(project.id)}/audio/${encodeURIComponent(item.file)}?${new URLSearchParams({root})}`});
   }
   return items;
 }
@@ -78,25 +79,25 @@ export async function loadAudio(project) {
   const received = new Array(items.length).fill(0);
   const totals = new Array(items.length).fill(0);
   $('audio-loading').hidden = false;
-  setLoadingProgress(`Loading ${items[0].name}…`, 0);
+  setLoadingProgress(t('loading.item', {name: items[0].name}), 0);
   try {
     for (const [i, item] of items.entries()) {
       pills.get(item.file)?.classList.add('loading');
-      setLoadingProgress(`Loading ${item.name} · ${i + 1} of ${items.length}`,
+      setLoadingProgress(t('loading.itemOf', {name: item.name, index: i + 1, total: items.length}),
         received.reduce((a, b) => a + b, 0) / (totals.reduce((a, b) => a + b, 0) || 1));
       const encoded = await fetchWithProgress(item.url, signal, (got, total) => {
         received[i] = got; totals[i] = total || Math.max(total, got);
         const knownTotal = totals.reduce((a, b) => a + b, 0);
         const fraction = knownTotal ? received.reduce((a, b) => a + b, 0) / knownTotal : i / items.length;
-        setLoadingProgress(`Loading ${item.name} · ${i + 1} of ${items.length}`, fraction);
-      }).catch(error => { throw new Error(`Could not load ${item.name}. Refresh the library and try again. (${error.message})`); });
+        setLoadingProgress(t('loading.itemOf', {name: item.name, index: i + 1, total: items.length}), fraction);
+      }).catch(error => { throw new Error(t('audio.loadFailed', {name: item.name, error: error.message})); });
       if (epoch !== store.loading) return;
       const buffer = await player.ensureContext().decodeAudioData(encoded);
       if (epoch !== store.loading) return;
       pills.get(item.file)?.classList.replace('loading', 'done');
       tracks.push({...item, buffer});
     }
-    setLoadingProgress('Loaded', 1);
+    setLoadingProgress(t('loading.loaded'), 1);
     for (const track of tracks) track.projectOffset = Number(track.offset) || 0;
     const trim = project.separation?.trim;
     const original = tracks.find(track => track.file === ORIGINAL_FILE);
@@ -136,14 +137,14 @@ export async function loadAudio(project) {
     const sectionStart = starts.length ? Math.min(...starts) : 0;
     const sectionEnd = ends.length ? Math.max(...ends) : 0;
     if (section) {
-      $('audio-status').textContent = `Playing section 0:00 – ${formatClock(section.end - section.start, 1)} (${(section.end - section.start).toFixed(1)} s)`;
+      $('audio-status').textContent = t('audio.playingSectionFromStart', {end: formatClock(section.end - section.start, 1), length: (section.end - section.start).toFixed(1)});
     } else if (stemTracks.length && sectionStart > 0) {
       await player.seek(sectionStart);
       $('seek').value = sectionStart;
       $('elapsed').textContent = time(sectionStart);
-      $('audio-status').textContent = `Playing section ${formatClock(sectionStart, 1)} – ${formatClock(sectionEnd, 1)} (${(sectionEnd - sectionStart).toFixed(1)} s)`;
+      $('audio-status').textContent = t('audio.playingSectionRange', {start: formatClock(sectionStart, 1), end: formatClock(sectionEnd, 1), length: (sectionEnd - sectionStart).toFixed(1)});
     } else if (hasStems && Math.max(...ends) - Math.min(...ends) > 0.25) {
-      $('audio-status').textContent = 'These stems have different durations. Shorter tracks will end first.';
+      $('audio-status').textContent = t('audio.differentDurations');
     } else {
       $('audio-status').textContent = '';
     }
@@ -152,8 +153,8 @@ export async function loadAudio(project) {
   } catch (error) {
     if (epoch !== store.loading || error.name === 'AbortError') return;
     $('audio-loading').hidden = true;
-    $('audio-status').replaceChildren(el('span', '', `Audio could not load: ${error.message} `));
-    const retry = el('button', 'text-button', 'Retry');
+    $('audio-status').replaceChildren(el('span', '', t('audio.couldNotLoad', {error: error.message})));
+    const retry = el('button', 'text-button', t('audio.retry'));
     retry.onclick = () => loadAudio(project);
     $('audio-status').append(retry);
   }
@@ -190,8 +191,8 @@ export function renderTracks() {
       el('div', 'track-detail', `${track.buffer.numberOfChannels === 1 ? 'MONO' : 'STEREO'} · ${time(track.buffer.duration)}`));
     if (track.file === 'guitar.wav') {
       const split = el('button', 'split-guitar');
-      split.type = 'button'; split.title = 'Split into lead and rhythm';
-      split.setAttribute('aria-label', 'Split into lead and rhythm');
+      split.type = 'button'; split.title = t('audio.splitGuitarTitle');
+      split.setAttribute('aria-label', t('audio.splitGuitarTitle'));
       split.dataset.splitGuitar = ''; split.disabled = !!jobRunning();
       split.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h5c4 0 3-7 7-7h4M9 12c4 0 3 7 7 7h4M17 2l3 3-3 3M17 16l3 3-3 3"/></svg>';
       const projectId = store.selected;
@@ -208,13 +209,13 @@ export function renderTracks() {
     const controls = el('div', 'track-controls');
     for (const [key, text] of [['muted', 'M'], ['solo', 'S']]) {
       const button = el('button', '', text);
-      button.setAttribute('aria-label', `${key === 'muted' ? 'Mute' : 'Solo'} ${track.name}`);
+      button.setAttribute('aria-label', t(key === 'muted' ? 'audio.muteLabel' : 'audio.soloLabel', {name: track.name}));
       button.setAttribute('aria-pressed', String(track[key]));
       button.onclick = () => { track[key] = !track[key]; player.updateMix(); syncTrackControls(); };
       button.dataset.control = key; controls.append(button);
     }
     const range = el('input'); range.type = 'range'; range.min = 0; range.max = 1; range.step = .01; range.value = track.volume;
-    range.setAttribute('aria-label', `${track.name} volume`);
+    range.setAttribute('aria-label', t('audio.volumeLabel', {name: track.name}));
     const value = el('span', 'volume-value', `${Math.round(track.volume * 100)}%`);
     range.oninput = () => { track.volume = Number(range.value); value.textContent = `${Math.round(track.volume * 100)}%`; player.updateMix(); };
     controls.append(range, value); row.append(label, wave, controls); $('tracks').append(row);
@@ -231,12 +232,17 @@ export function syncTrackControls() {
     row.querySelector('[data-control=solo]').setAttribute('aria-pressed', String(track.solo));
   });
 }
+onLangChange(() => {
+  if (!player.tracks.length) return;
+  for (const track of player.tracks) track.name = track.file === ORIGINAL_FILE ? t('track.original') : stemLabel(track.file, track.name);
+  renderTracks();
+});
 export function animate() {
   const position = player.position();
   $('elapsed').textContent = time(position);
   if (document.activeElement !== $('seek')) $('seek').value = position;
   $('play').dataset.state = player.starting ? 'starting' : player.playing ? 'playing' : 'paused';
-  $('play').setAttribute('aria-label', player.starting ? 'Cancel playback start' : player.playing ? 'Pause' : 'Play');
+  $('play').setAttribute('aria-label', player.starting ? t('audio.cancelPlaybackStart') : player.playing ? t('audio.pause') : t('audio.play'));
   document.querySelectorAll('.playhead').forEach(p => p.style.left = `${player.duration ? position / player.duration * 100 : 0}%`);
   requestAnimationFrame(animate);
 }

@@ -1,3 +1,4 @@
+import {t} from './i18n.js';
 // One AudioContext clock and one scheduled start time for every stem.
 export class StemPlayer {
   constructor() {
@@ -97,7 +98,7 @@ export class StemPlayer {
         this.tempoNode.onprocessorerror = () => {
           if (generation !== this.generation) return;
           this.pause();
-          this.onError?.(new Error('Slower playback stopped unexpectedly. Try playing again or choose 100% speed.'));
+          this.onError?.(new Error(t('player.slowerStoppedUnexpected')));
         };
       }
       this.playing = true;
@@ -136,17 +137,17 @@ export class StemPlayer {
     }
   }
   async loadTempoModule(context) {
-    if (!context.audioWorklet) throw new Error('Slower playback is unavailable in this browser. Choose 100% speed or use a current browser.');
+    if (!context.audioWorklet) throw new Error(t('player.slowerUnavailable'));
     if (!this.tempoModule) {
       this.tempoModule = context.audioWorklet.addModule('/tempo-worklet.js').catch(error => {
         this.tempoModule = null;
-        throw new Error('Could not prepare slower playback. Try again or choose 100% speed.', {cause: error});
+        throw new Error(t('player.slowerPrepareFailed'), {cause: error});
       });
     }
     await this.tempoModule;
   }
   async setPlaybackRate(rate) {
-    if (!Number.isFinite(rate) || rate < 0.5 || rate > 1) throw new RangeError('Playback speed must be between 50% and 100%.');
+    if (!Number.isFinite(rate) || rate < 0.5 || rate > 1) throw new RangeError(t('player.speedRange'));
     if (rate === this.playbackRate) return;
     const resume = this.playing || this.starting;
     this.pause();

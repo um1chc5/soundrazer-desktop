@@ -1,23 +1,27 @@
 export const colors = ['#ff8a3d', '#5ec8ff', '#b48cff', '#4fe0a8', '#ffd166', '#ff6f91'];
 export const ORIGINAL_COLOR = '#9aa3b2';
-export const STEMS = [['vocals', 'Vocals', '#ff8a3d'], ['drums', 'Drums', '#5ec8ff'], ['bass', 'Bass', '#b48cff'],
-  ['guitar', 'Guitar', '#4fe0a8'], ['piano', 'Piano', '#ffd166'], ['other', 'Other', '#ff6f91']];
+// Second element of each stem/step/format tuple below is an i18n key (see i18n.js), not
+// literal text, so labels stay in sync when the language is switched at runtime.
+export const STEMS = [['vocals', 'stem.vocals', '#ff8a3d'], ['drums', 'stem.drums', '#5ec8ff'], ['bass', 'stem.bass', '#b48cff'],
+  ['guitar', 'stem.guitar', '#4fe0a8'], ['piano', 'stem.piano', '#ffd166'], ['other', 'stem.other', '#ff6f91']];
+export const STEM_LABEL_KEYS = {vocals: 'stem.vocals', drums: 'stem.drums', bass: 'stem.bass', guitar: 'stem.guitar', piano: 'stem.piano', other: 'stem.other', instrumental: 'stem.instrumental'};
 export const DEFAULT_STEMS = ['vocals', 'drums', 'bass', 'guitar'];
 export const AUDIO_EXTENSIONS = ['.wav', '.flac', '.mp3', '.opus', '.ogg', '.m4a', '.aac', '.aiff', '.aif'];
-export const SEPARATION_STEPS = [['prepare', 'Prepare audio'], ['load', 'Load AI model'], ['separate', 'Separate stems'], ['finalize', 'Save stems']];
-export const GUITAR_STEPS = [['prepare', 'Load model'], ['separate', 'Split guitar'], ['finalize', 'Save tracks']];
-export const YOUTUBE_STEPS = [['download', 'Download audio'], ['finalize', 'Create project']];
-export const EXPORT_STEPS = [['prepare', 'Check files'], ['export', 'Convert stems'], ['finalize', 'Write files']];
+export const SEPARATION_STEPS = [['prepare', 'step.separation.prepare'], ['load', 'step.separation.load'], ['separate', 'step.separation.separate'], ['finalize', 'step.separation.finalize']];
+export const GUITAR_STEPS = [['prepare', 'step.guitar.prepare'], ['separate', 'step.guitar.separate'], ['finalize', 'step.guitar.finalize']];
+export const YOUTUBE_STEPS = [['download', 'step.youtube.download'], ['finalize', 'step.youtube.finalize']];
+export const EXPORT_STEPS = [['prepare', 'step.export.prepare'], ['export', 'step.export.export'], ['finalize', 'step.export.finalize']];
 export const EXPORT_FORMATS = [
-  ['flac', 'FLAC', 'Lossless · default'],
-  ['mp3', 'MP3 320', 'Universal compatibility'],
-  ['opus', 'Opus 192', 'Smallest files'],
-  ['m4a', 'M4A 256', 'Apple ecosystem'],
-  ['wav16', 'WAV 16-bit', 'DAW-safe'],
-  ['aiff', 'AIFF', 'Hardware and DAW workflows'],
+  ['flac', 'format.flac.title', 'format.flac.sub'],
+  ['mp3', 'format.mp3.title', 'format.mp3.sub'],
+  ['opus', 'format.opus.title', 'format.opus.sub'],
+  ['m4a', 'format.m4a.title', 'format.m4a.sub'],
+  ['wav16', 'format.wav16.title', 'format.wav16.sub'],
+  ['aiff', 'format.aiff.title', 'format.aiff.sub'],
 ];
-export const SETUP_STEPS = [['prepare', 'Check setup'], ['download', 'Download components'], ['install', 'Install packages'], ['finalize', 'Finish']];
-export const SETUP_STAGE_LABEL = {ffmpeg: 'FFmpeg', separation: 'the separation engine', youtube: 'YouTube support'};
-export const SETUP_PHASE_TITLE = {prepare: 'Checking what’s needed', download: 'Downloading components', install: 'Installing packages', finalize: 'Finishing up'};
-export const SETUP_PHASE_SUB = {prepare: 'Verifying the runtime, FFmpeg and the separation engine.', download: 'Fetching the files above.', install: 'This can take several minutes.', finalize: 'Verifying everything works.'};
+export const SETUP_STEPS = [['prepare', 'step.setup.prepare'], ['download', 'step.setup.download'], ['install', 'step.setup.install'], ['finalize', 'step.setup.finalize']];
+export const SETUP_STAGE_LABEL = {ffmpeg: 'setup.stageShort.ffmpeg', separation: 'setup.stageShort.separation', youtube: 'setup.stageShort.youtube', runtime: 'setup.stageShort.runtime'};
+export const SETUP_STAGE_FULL_LABEL = {ffmpeg: 'setup.stage.ffmpeg', separation: 'setup.stage.separation', youtube: 'setup.stage.youtube', runtime: 'setup.stage.runtime'};
+export const SETUP_PHASE_TITLE = {prepare: 'setup.phase.prepare.title', finalize: 'setup.phase.finalize.title'};
+export const SETUP_PHASE_SUB = {prepare: 'setup.phase.prepare.sub', download: 'setup.phase.download.sub', install: 'setup.phase.install.sub', finalize: 'setup.phase.finalize.sub'};
 export const ORIGINAL_FILE = '__original__';

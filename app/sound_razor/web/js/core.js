@@ -1,4 +1,6 @@
 import {store} from './store.js';
+import {t} from './i18n.js';
+import {STEM_LABEL_KEYS} from './constants.js';
 const $ = id => document.getElementById(id);
 const token = document.querySelector('meta[name="sound-razor-token"]').content;
 function el(tag, className, text) {
@@ -35,8 +37,12 @@ async function api(path, data) {
     body: data === undefined ? undefined : JSON.stringify(data),
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || `Request failed (${response.status})`);
+  if (!response.ok) throw new Error(result.error || t('core.requestFailed', {status: response.status}));
   return result;
+}
+function stemLabel(file, fallback) {
+  const key = STEM_LABEL_KEYS[stem(file || '').toLowerCase()];
+  return key ? t(key) : fallback;
 }
 function activeProject() { return store.state.projects.find(p => p.id === store.selected); }
 function jobRunning() { return store.state.job && ['running', 'cancelling'].includes(store.state.job.status); }
@@ -46,4 +52,4 @@ function fields(prefix) {
   if (store.lookupSelections[prefix]) data.lookup_token = store.lookupSelections[prefix];
   return data;
 }
-export {$, token, el, notice, time, duration, serverNow, setClockSkew, sep, stem, api, activeProject, jobRunning, projectUrl, fields};
+export {$, token, el, notice, time, duration, serverNow, setClockSkew, sep, stem, api, activeProject, jobRunning, projectUrl, fields, stemLabel};

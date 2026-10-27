@@ -1,6 +1,7 @@
 import {$, time, notice} from './core.js';
 import {store} from './store.js';
 import {player, renderTracks, syncTrackControls} from './audio.js';
+import {t} from './i18n.js';
 /* ---------- transport ---------- */
 $('play').onclick = () => player.playing || player.starting ? player.pause() : player.play().catch(e => notice(e.message, 'error'));
 $('restart').onclick = () => player.seek(0).catch(e => notice(e.message, 'error'));
@@ -10,7 +11,7 @@ $('master-volume').oninput = () => player.setVolume(Number($('master-volume').va
 function showSpeed() {
   const percent = Number($('playback-speed').value);
   $('speed-value').textContent = `${percent}%`;
-  $('playback-speed').setAttribute('aria-valuetext', `${percent} percent of original speed`);
+  $('playback-speed').setAttribute('aria-valuetext', t('transport.speedPercent', {percent}));
 }
 $('playback-speed').oninput = showSpeed;
 $('playback-speed').onchange = () => {

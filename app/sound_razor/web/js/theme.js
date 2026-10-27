@@ -1,4 +1,5 @@
 import {$} from './core.js';
+import {t, onLangChange} from './i18n.js';
 
 function initTheme() {
   let saved = 'dark';
@@ -12,8 +13,9 @@ $('theme-toggle').onclick = () => {
   const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
   document.documentElement.dataset.theme = next;
   try { localStorage.setItem('sound-razor-theme', next); } catch (_) { /* private mode etc. */ }
-  $('theme-toggle').title = $('theme-toggle').ariaLabel = next === 'light' ? 'Switch to dark theme' : 'Switch to light theme';
+  $('theme-toggle').title = $('theme-toggle').ariaLabel = next === 'light' ? t('theme.toDark') : t('theme.toLight');
 };
-$('theme-toggle').title = $('theme-toggle').ariaLabel = document.documentElement.dataset.theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme';
+$('theme-toggle').title = $('theme-toggle').ariaLabel = document.documentElement.dataset.theme === 'light' ? t('theme.toDark') : t('theme.toLight');
+onLangChange(() => { $('theme-toggle').title = $('theme-toggle').ariaLabel = document.documentElement.dataset.theme === 'light' ? t('theme.toDark') : t('theme.toLight'); });
 
 }

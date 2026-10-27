@@ -5,6 +5,7 @@ import {pickerValue, pickerValid} from '../picker.js';
 import {renderProgress} from '../progress.js';
 import {player} from '../audio.js';
 import {TrimEditor, trimRequest, sectionText} from '../trim.js';
+import {t} from '../i18n.js';
 /* ---------- new separation ---------- */
 export function setSource(mode) {
   if (mode !== 'file') store.newTrimEditor?.stopPreview();
@@ -50,14 +51,14 @@ async function prepareNewTrim(file) {
 export function chooseFile(file) {
   if (!file) return;
   const ext = (file.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
-  if (!AUDIO_EXTENSIONS.includes(ext)) { notice(`${file.name} is not a supported audio file.`, 'error'); return; }
+  if (!AUDIO_EXTENSIONS.includes(ext)) { notice(t('new.notSupportedFile', {filename: file.name}), 'error'); return; }
   store.chosenFile = file; $('start-error').textContent = '';
   $('new-title').placeholder = stem(file.name).replaceAll('_', ' ');
   prepareNewTrim(file);
   renderNew();
 }
 $('audio-file').onchange = () => chooseFile($('audio-file').files[0]);
-$('file-clear').onclick = () => { resetNewTrim(); store.chosenFile = null; $('audio-file').value = ''; $('new-title').placeholder = 'Uses the file name'; renderNew(); };
+$('file-clear').onclick = () => { resetNewTrim(); store.chosenFile = null; $('audio-file').value = ''; $('new-title').placeholder = t('new.usesFileName'); renderNew(); };
 const zone = $('dropzone');
 zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragging'); });
 zone.addEventListener('dragleave', () => zone.classList.remove('dragging'));
@@ -75,7 +76,7 @@ function renderNewChip() {
   }
   chip.hidden = false;
   chip.append(el('span', '', sectionText(range)));
-  const clear = el('button', 'text-button', 'Clear');
+  const clear = el('button', 'text-button', t('common.clear'));
   clear.type = 'button';
   clear.onclick = () => store.newTrimEditor?.setRange(0, duration);
   chip.append(clear);
@@ -87,12 +88,12 @@ function renderNewTrim() {
   if (!available) return;
   const hint = $('new-trim-hint');
   if (!store.newTrimDuration) {
-    hint.textContent = 'Reading the duration… You can still separate the full file.';
+    hint.textContent = t('new.trim.readingDuration');
     $('new-trim-editor').replaceChildren();
     $('new-trim-chip').hidden = true;
     return;
   }
-  hint.textContent = 'Optional: process only part of this song. The original file stays complete.';
+  hint.textContent = t('new.trim.optional');
   if (!store.newTrimEditor) {
     store.newTrimEditor = new TrimEditor($('new-trim-editor'), {
       duration: store.newTrimDuration,
@@ -109,13 +110,15 @@ export function renderNew() {
   if (store.chosenFile) {
     $('file-name').textContent = store.chosenFile.name;
     $('file-meta').textContent = `${(store.chosenFile.size / 1048576).toFixed(1)} MB · ${(store.chosenFile.name.split('.').pop() || '').toUpperCase()}`;
+  } else {
+    $('new-title').placeholder = t('new.usesFileName');
   }
-  $('root-label').textContent = store.state.root || 'No folder selected';
+  $('root-label').textContent = store.state.root || t('common.noFolderSelected');
   $('root-label').title = store.state.root || '';
   const isDefault = store.state.root && store.state.root === store.state.default_root;
   $('root-default').hidden = !isDefault;
   $('folder-default').hidden = !store.state.default_root || isDefault;
-  const name = store.sourceMode === 'file' ? (store.chosenFile ? stem(store.chosenFile.name) : '<song name>') : '<video title>';
+  const name = store.sourceMode === 'file' ? (store.chosenFile ? stem(store.chosenFile.name) : t('new.placeholderSongName')) : t('new.placeholderVideoTitle');
   $('output-preview').textContent = store.state.root ? `→ ${store.state.root}${sep()}${name}${sep()}stems` : '';
   const youtube = store.state.job?.kind === 'youtube' ? store.state.job : null;
   const showYt = !!youtube && (jobRunning() || (store.pending && store.pending.jobId === youtube.id) || youtube.status === 'failed' && store.pending?.failed === youtube.id);
@@ -123,7 +126,7 @@ export function renderNew() {
   if (showYt) renderProgress($('yt-panel'), youtube);
   const ready = store.sourceMode === 'file' ? !!store.chosenFile : /^https?:\/\/\S+/.test($('youtube-url').value.trim());
   $('start').disabled = !ready || !store.state.root || store.busy || !!jobRunning() || !pickerValid($('new-stems'));
-  $('start').textContent = jobRunning() && !store.busy ? 'Another job is running…' : store.busy ? 'Starting…' : 'Start separation';
+  $('start').textContent = jobRunning() && !store.busy ? t('start.anotherRunning') : store.busy ? t('start.starting') : t('start.button');
   $('folder-open').disabled = store.busy || !!jobRunning();
   $('folder-default').disabled = store.busy || !!jobRunning();
   renderNewTrim();
@@ -144,14 +147,14 @@ export function upload(file, data) {
       const pct = Math.round(e.loaded / e.total * 100);
       $('upload-progress').value = pct; $('upload-pct').textContent = `${pct}%`;
     };
-    xhr.onload = () => { try { const result = JSON.parse(xhr.responseText); xhr.status === 200 ? resolve(result) : reject(new Error(result.error)); } catch (_) { reject(new Error('Import failed. Check the server terminal.')); } };
-    xhr.onerror = () => reject(new Error('Could not reach the local server.'));
+    xhr.onload = () => { try { const result = JSON.parse(xhr.responseText); xhr.status === 200 ? resolve(result) : reject(new Error(result.error)); } catch (_) { reject(new Error(t('new.importFailed'))); } };
+    xhr.onerror = () => reject(new Error(t('new.couldNotReachServer')));
     xhr.send(file);
   });
 }
 $('start').onclick = async () => {
   if (store.busy || jobRunning()) return;
-  if (store.state.setup?.required) { notice('Complete the one-time setup first.', 'error'); return; }
+  if (store.state.setup?.required) { notice(t('setup.completeFirst'), 'error'); return; }
   store.newTrimEditor?.stopPreview();
   const choice = pickerValue($('new-stems'));
   const trim = store.sourceMode === 'file' ? trimRequest(store.newTrimRange, store.newTrimDuration) : null;

@@ -99,10 +99,21 @@
    otherwise add a stray empty ::before box here since this button renders real <svg>
    children instead of a mask icon. */
 .theme-toggle::before { content: none; }
-.theme-toggle { margin-left: auto; border: 1px solid var(--line); }
+.theme-toggle { border: 1px solid var(--line); }
 .theme-toggle .icon-moon { display: none; }
 :root[data-theme="light"] .theme-toggle .icon-sun { display: none; }
 :root[data-theme="light"] .theme-toggle .icon-moon { display: block; }
+
+.lang-toggle::before { content: none; }
+.lang-toggle {
+  margin-left: auto;
+  width: auto;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
 
 .credit-row {
   display: flex;

@@ -9,15 +9,18 @@ import './lookup.js';
 import {nav} from './store.js';
 import {jobRunning, notice} from './core.js';
 import {animate} from './audio.js';
+import {t} from './i18n.js';
+import {initLangToggle} from './lang-toggle.js';
 
 // Late-bind the hooks only after every module has evaluated, then initialize the
 // remaining page chrome before the initial state poll starts.
 initNavigation();
 initTitlebar();
 initThemeToggle();
+initLangToggle();
 
 async function poll() {
-  try { await nav.refresh(); } catch (error) { notice(`Connection problem: ${error.message}`, 'error'); }
+  try { await nav.refresh(); } catch (error) { notice(t('nav.connectionProblem', {error: error.message}), 'error'); }
   setTimeout(poll, jobRunning() ? 1000 : 2500);
 }
 poll(); animate();

@@ -1,6 +1,7 @@
-import {SETUP_STEPS, SETUP_STAGE_LABEL, SETUP_PHASE_TITLE, SETUP_PHASE_SUB} from '../constants.js';
+import {SETUP_STAGE_FULL_LABEL} from '../constants.js';
 import {$, el, api, notice, jobRunning} from '../core.js';
 import {store, nav} from '../store.js';
+import {t} from '../i18n.js';
 /* ---------- first-run setup ---------- */
 // How much of the overall 0-100 progress each running stage gets, in the same order
 // backend setup.py allocated bands (STAGE_ORDER, filtered to what was actually
@@ -56,7 +57,9 @@ export function renderSetup() {
     row.classList.toggle('setup-row--active', isActive || (running && job?.stage === stage.id));
     row.classList.toggle('setup-row--done', isDone);
     const status = el('span', `setup-status ${cls}`, icon);
-    row.append(input, status, el('span', 'setup-row-label', stage.label), el('span', 'setup-row-size', `~${stage.size_mb} MB`));
+    const labelKey = SETUP_STAGE_FULL_LABEL[stage.id];
+    const label = labelKey ? t(labelKey) : stage.label;
+    row.append(input, status, el('span', 'setup-row-label', label), el('span', 'setup-row-size', `~${stage.size_mb} MB`));
     if (isActive || (running && job?.stage === stage.id)) {
       const bar = el('div', 'setup-row-bar'); const fill = el('i'); fill.style.width = `${pct ?? 0}%`; bar.append(fill);
       row.append(bar);
@@ -64,8 +67,8 @@ export function renderSetup() {
     list.append(row);
   }
   $('setup-total').textContent = running
-    ? `Installing · ${Math.floor(job.progress)}% overall`
-    : `Total: ~${total} MB · usually 3–8 min on a typical connection`;
+    ? t('setup.installing', {pct: Math.floor(job.progress)})
+    : t('setup.totalSummary', {total});
   const requiredMissing = setup.stages.some(s => s.required && s.missing);
   $('setup-start').disabled = !requiredMissing || running;
   $('setup-start').hidden = running;
@@ -81,7 +84,7 @@ export function renderSetupBanner() {
 export function renderSetupView() {
   const job = store.state.job;
   if (job && !['running', 'cancelling'].includes(job.status) && store.setupJobAnnounced !== job.id) {
-    if (job.status === 'failed') { notice(job.error || 'Setup failed. Try again.', 'error'); store.setupJobAnnounced = job.id; }
+    if (job.status === 'failed') { notice(job.error || t('setup.failed'), 'error'); store.setupJobAnnounced = job.id; }
     if (job.status === 'succeeded') { store.setupRunningStages = []; }
     store.setupJobAnnounced = job.id;
   }

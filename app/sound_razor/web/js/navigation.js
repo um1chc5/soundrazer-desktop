@@ -5,6 +5,7 @@ import {renderNew, continuePending} from './views/new.js';
 import {renderLibrary} from './views/library.js';
 import {renderSong} from './views/song.js';
 import {renderSetup, renderSetupView, renderSetupBanner} from './views/setup.js';
+import {t, onLangChange} from './i18n.js';
 function clearSongTrim() {
   store.songTrimEditor?.destroy();
   store.songTrimEditor = null;
@@ -29,7 +30,7 @@ document.querySelectorAll('.tab').forEach(tab => tab.onclick = () => {
 });
 $('back').onclick = () => show('library');
 export function selectProject(id) {
-  if (store.state.setup?.required && !store.setupDeclined) { notice('Complete the one-time setup first.', 'error'); show('setup'); return; }
+  if (store.state.setup?.required && !store.setupDeclined) { notice(t('setup.completeFirst'), 'error'); show('setup'); return; }
   if (store.selected === id && store.view === 'song') return;
   clearSongTrim();
   store.selected = id; store.resepOpen = false; store.view = 'song';
@@ -54,8 +55,8 @@ export function renderChrome() {
   const job = store.state.job, pill = $('job-pill');
   pill.hidden = !jobRunning();
   if (jobRunning()) {
-    const what = job.kind === 'youtube' ? 'Downloading' : job.kind === 'setup' ? 'Setting up' : job.kind === 'export' ? 'Exporting' : job.guitar_split ? 'Splitting guitar' : 'Separating';
-    $('job-pill-text').textContent = `${what} · ${Math.floor(job.progress || 0)}%`;
+    const what = job.kind === 'youtube' ? t('nav.downloading') : job.kind === 'setup' ? t('nav.settingUp') : job.kind === 'export' ? t('nav.exporting') : job.guitar_split ? t('nav.splittingGuitar') : t('nav.separating');
+    $('job-pill-text').textContent = t('nav.jobPillText', {what, pct: Math.floor(job.progress || 0)});
   }
 }
 $('job-pill').onclick = () => { const job = store.state.job; if (job?.project) selectProject(job.project); else show('new'); };
@@ -76,22 +77,23 @@ export function announce() {
   if (job.status === 'succeeded') {
     store.announced = job.id;
     if (job.kind === 'setup') {
-      notice('Setup complete — you’re ready to separate tracks.', 'success');
+      notice(t('setup.complete'), 'success');
       store.setupJobAnnounced = job.id;
       show('new');
       return;
     }
     if (job.kind === 'export') {
       const labels = {flac: 'FLAC', mp3: 'MP3', opus: 'Opus', m4a: 'M4A', wav16: 'WAV', aiff: 'AIFF'};
-      notice(`Exported ${job.stems.length} stems as ${(job.formats || []).map(f => labels[f] || f).join(', ')}.`, 'success');
+      notice(t('nav.exportedNotice', {count: job.stems.length, formats: (job.formats || []).map(f => labels[f] || f).join(', ')}), 'success');
       return;
     }
     const p = store.state.projects.find(x => x.id === job.project);
-    notice(`${p?.title || 'Song'} is ready: ${job.stems.length} stems saved.`, 'success');
+    notice(t('nav.songReadyNotice', {title: p?.title || t('nav.defaultSongTitle'), count: job.stems.length}), 'success');
   }
 }
 
 
 export function initNavigation() {
   Object.assign(nav, {show, selectProject, refresh, render});
+  onLangChange(render);
 }

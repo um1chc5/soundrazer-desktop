@@ -1,4 +1,5 @@
 import {$, api, notice} from './core.js';
+import {t} from './i18n.js';
 /* ---------- Desktop window chrome (frameless pywebview only) ---------- */
 // Routed through our own HTTP API (POST/GET /api/window/<action>), same as everything
 // else in this app, rather than pywebview's JS bridge: window.pywebview never actually
@@ -73,7 +74,7 @@ export function initTitlebar() {
     const result = await windowAction('toggle-maximize');
     const maximized = !!result?.maximized;
     $('win-max').classList.toggle('is-restore', maximized);
-    $('win-max').title = $('win-max').ariaLabel = maximized ? 'Restore' : 'Maximize';
+    $('win-max').title = $('win-max').ariaLabel = maximized ? t('titlebar.restore') : t('titlebar.maximize');
     $('win-max').disabled = false;
   };
   $('win-close').onclick = () => windowAction('close');

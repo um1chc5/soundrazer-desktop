@@ -1,6 +1,7 @@
 import {$, el, notice, api, projectUrl} from './core.js';
 import {store, nav} from './store.js';
 import {TrimEditor, trimRequest, sectionText} from './trim.js';
+import {t} from './i18n.js';
 
 function renderChip(offset) {
   const chip = $('split-chip');
@@ -31,7 +32,7 @@ export function openSplitDialog(projectId, track) {
     displayOffset: offset,
     start: 0,
     end: duration,
-    hint: 'Times are shown in project time. The guitar stem itself is not changed.',
+    hint: t('split.hint'),
     onChange: range => { store.splitRange = range; renderChip(offset); },
   });
   renderChip(offset);
