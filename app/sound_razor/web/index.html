@@ -102,6 +102,10 @@
 
           <div id="pane-yt" hidden>
             <label class="field"><span data-i18n="youtube.label">YouTube link</span><input id="youtube-url" type="url" placeholder="https://www.youtube.com/watch?v=…"></label>
+            <div id="yt-missing" class="yt-missing" hidden>
+              <p data-i18n="youtube.missing">YouTube import needs one more small download (yt-dlp, ~15 MB).</p>
+              <button id="yt-install" type="button" class="btn btn-ghost btn-sm" data-i18n="youtube.install">Install YouTube support</button>
+            </div>
             <p class="hint" data-i18n="youtube.hint">Only download videos you have the right to use. Audio is extracted with yt-dlp. YouTube imports run full-length first; trim afterwards with Separate again.</p>
           </div>
 

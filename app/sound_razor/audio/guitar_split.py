@@ -28,7 +28,7 @@ def split_guitar(source: Path, output: Path, cache: Path, trim=None) -> list[Pat
     paths = [output/'lead.flac', output/'rhythm.flac']
     settings_path = output/'separation.json'
     validate_outputs(source, paths + [settings_path])
-    settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
+    settings = json.loads(settings_path.read_text(encoding='utf-8')) if settings_path.exists() else {}
     if not isinstance(settings, dict):
         raise ValueError('Separation settings must contain a JSON object.')
     saved = settings.get('trim')
@@ -65,7 +65,7 @@ def split_guitar(source: Path, output: Path, cache: Path, trim=None) -> list[Pat
     weights = checkpoint(cache)
     torch.set_num_threads(cpu_threads())
     torch.manual_seed(42)
-    config = json.loads((Path(__file__).resolve().parents[1] / 'vendor/roformer/lead_rhythm.json').read_text())
+    config = json.loads((Path(__file__).resolve().parents[1] / 'vendor/roformer/lead_rhythm.json').read_text(encoding='utf-8'))
     config['multi_stft_resolutions_window_sizes'] = tuple(config['multi_stft_resolutions_window_sizes'])
     with contextlib.redirect_stdout(sys.stderr):
         model = MelBandRoformer(**config)
@@ -116,7 +116,7 @@ def split_guitar(source: Path, output: Path, cache: Path, trim=None) -> list[Pat
         # 24-bit: FLAC has no float format, and soundfile would default to 16-bit.
         sf.write(stage/paths[0].name, lead, sr, subtype='PCM_24')
         sf.write(stage/paths[1].name, mix-lead, sr, subtype='PCM_24')
-        (stage/settings_path.name).write_text(json.dumps(settings, indent=2)+'\n')
+        (stage/settings_path.name).write_text(json.dumps(settings, indent=2)+'\n', encoding='utf-8')
         validate_outputs(source, paths + [settings_path])
         for path in paths + [settings_path]:
             (stage/path.name).replace(path)

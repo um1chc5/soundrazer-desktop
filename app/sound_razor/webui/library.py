@@ -114,7 +114,7 @@ class Library:
             self.set_root(str(root), create=True)
         elif self.config.exists():
             try:
-                saved = Path(json.loads(self.config.read_text())["root"])
+                saved = Path(json.loads(self.config.read_text(encoding='utf-8'))["root"])
                 if saved.is_dir():
                     self.root = saved.resolve()
             except (ValueError, KeyError, OSError):
@@ -446,7 +446,7 @@ class Library:
             if data.get('root') != str(root):
                 raise ValueError('The projects folder changed. Reopen YouTube import.')
             if importlib.util.find_spec('yt_dlp') is None:
-                raise ValueError('Install YouTube support: uv pip install --python .venv/bin/python -e ".[youtube]"')
+                raise ValueError('YouTube support is not installed. Click "Install YouTube support" above the link box.')
             if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):
                 raise ValueError(MISSING_FFMPEG)
             job = {'id': uuid.uuid4().hex, 'kind': 'youtube', 'project': None,
@@ -503,8 +503,8 @@ class Library:
                 work = Path(temporary)
                 with self.lock:
                     process = self._launch(job, youtube_command(url, work), stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT, text=True, errors='replace',
-                        env=dict(os.environ, PYTHONUNBUFFERED='1'), start_new_session=True)
+                        stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace',
+                        env=dict(os.environ, PYTHONUNBUFFERED='1', PYTHONIOENCODING='utf-8'), start_new_session=True)
                     if process is None:
                         return
                 for line in process.stdout:
@@ -524,7 +524,8 @@ class Library:
                         return
                     if code:
                         raise ValueError(f'YouTube download failed (exit {code}). See the download log.')
-                    info = json.loads((work/'source.info.json').read_text())
+                    # yt-dlp writes UTF-8; Windows' default cp1252 chokes on non-ASCII titles.
+                    info = json.loads((work/'source.info.json').read_text(encoding='utf-8'))
                     defaults = {'title': info.get('track') or info.get('title') or 'YouTube recording',
                                 'artist': info.get('artist') or info.get('creator') or '',
                                 'album': info.get('album') or '',
@@ -556,10 +557,11 @@ class Library:
                     command = [sys.executable, "-m", "sound_razor", "separate", "--file", str(project / original),
                                "--output", str(stage), "--cache", str(self.cache), "--stems", *stems,
                                *range_args]
-                env = dict(os.environ, PYTHONUNBUFFERED="1", ORT_DISABLE_TELEMETRY="1")
+                # UTF-8 both ways, so non-ASCII song titles and paths survive the pipe on Windows.
+                env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8", ORT_DISABLE_TELEMETRY="1")
                 with self.lock:
                     process = self._launch(job, command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                           text=True, errors="replace", env=env, start_new_session=True)
+                                           text=True, encoding="utf-8", errors="replace", env=env, start_new_session=True)
                     if process is None:
                         return
                 job_logs = self._job_logs(job_id)

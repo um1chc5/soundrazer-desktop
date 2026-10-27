@@ -184,7 +184,8 @@ def separate(source: str, output: Path | None = None, model: str | None = None,
     if importlib.util.find_spec("audio_separator") is None:
         raise RuntimeError('Install separation support: pip install -e ".[separation]"')
     if youtube and importlib.util.find_spec("yt_dlp") is None:
-        raise RuntimeError('Install YouTube support: pip install -e ".[youtube]"')
+        raise RuntimeError('YouTube support is not installed. Install it from the YouTube tab in the app '
+                           '(or, from a dev checkout: pip install -e ".[youtube]").')
     cache = cache.expanduser().resolve()
     cache.mkdir(parents=True, exist_ok=True)
     import torch
@@ -238,7 +239,7 @@ def separate(source: str, output: Path | None = None, model: str | None = None,
             settings_value = {"stems": selected_stems}
             if saved_trim is not None:
                 settings_value["trim"] = {"start": saved_trim[0], "end": saved_trim[1]}
-            (stage / settings.name).write_text(json.dumps(settings_value, indent=2) + "\n")
+            (stage / settings.name).write_text(json.dumps(settings_value, indent=2) + "\n", encoding="utf-8")
             validate_outputs(original, destinations + [settings])
             for destination in destinations + [settings]:
                 (stage / destination.name).replace(destination)

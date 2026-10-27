@@ -36,7 +36,7 @@
 !include "MUI2.nsh"
 
 !define NAME "SoundRazer Desktop"
-!define VERSION "1.2.1"
+!define VERSION "1.2.2"
 !define PACKAGE_NAME "SoundRazer-Setup-x64"
 !define REG_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${NAME}"
 !define ICON "..\assets\icon.ico"
@@ -73,6 +73,10 @@ Section "SoundRazer Desktop" SecMain
   ; Embedded Python runtime with pywebview pre-installed (see header comment).
   SetOutPath "$INSTDIR\runtime"
   File /r "embedded\runtime\*"
+  ; Puts setup's packages (%LOCALAPPDATA%\SoundRazer Desktop\packages) on the runtime's
+  ; sys.path and keeps the shared per-user site-packages out (see sound_razor/tools.py).
+  SetOutPath "$INSTDIR\runtime\Lib\site-packages"
+  File "soundrazer.pth"
   SetOutPath "$INSTDIR"
 
   ; Start Menu entry. Launches via launch.bat (app\launch.bat, copied in by the
@@ -121,6 +125,7 @@ Section "Uninstall"
   Delete "$INSTDIR\ui_entrypoint.py"
   Delete "$INSTDIR\launch.bat"
   RMDir /r "$INSTDIR\sound_razor"
+  RMDir /r "$INSTDIR\__pycache__"
   RMDir /r "$INSTDIR\soundrazer_desktop.egg-info"
   RMDir /r "$INSTDIR\runtime"
   RMDir "$INSTDIR"
@@ -129,4 +134,16 @@ Section "Uninstall"
   RMDir "$SMPROGRAMS\${NAME}"
   Delete "$DESKTOP\${NAME}.lnk"
   DeleteRegKey HKLM "${REG_KEY}"
+
+  ; What first-run setup downloaded into the per-user app data folder is part of the
+  ; app, so it always goes. Models and settings are the user's call (kept on /S);
+  ; separated songs live in Documents and are never touched.
+  RMDir /r "$LOCALAPPDATA\${NAME}\packages"
+  RMDir /r "$LOCALAPPDATA\${NAME}\ffmpeg"
+  MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Also delete the downloaded AI models (~500 MB) and app settings?$\n$\nYour separated songs are not affected." /SD IDNO IDNO keep_data
+    RMDir /r "$LOCALAPPDATA\${NAME}\models"
+    Delete "$LOCALAPPDATA\${NAME}\ui.json"
+    Delete "$LOCALAPPDATA\${NAME}\launch.log"
+  keep_data:
+  RMDir "$LOCALAPPDATA\${NAME}"
 SectionEnd

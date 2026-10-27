@@ -1,0 +1,1 @@
+import os, site, sys; u = site.getusersitepackages(); u in sys.path and sys.path.remove(u); site.ENABLE_USER_SITE = False; d = os.path.join(os.environ.get('LOCALAPPDATA') or os.path.join(os.path.expanduser('~'), 'AppData', 'Local'), 'SoundRazer Desktop', 'packages', 'Lib', 'site-packages'); os.makedirs(d, exist_ok=True); site.addsitedir(d)

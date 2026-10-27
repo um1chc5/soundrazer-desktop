@@ -123,7 +123,7 @@ def describe_project(path: Path) -> dict:
         try:
             if settings.stat().st_size > 1000000:
                 raise ValueError("Separation settings are too large.")
-            separation = json.loads(settings.read_text())
+            separation = json.loads(settings.read_text(encoding="utf-8"))
             if not isinstance(separation, dict):
                 raise ValueError("Invalid separation settings.")
             saved = separation.get("guitar_split") or []

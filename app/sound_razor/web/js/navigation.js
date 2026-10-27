@@ -89,7 +89,8 @@ function announceJob(job) {
   if (job.status === 'succeeded') {
     store.announced.add(job.id);
     if (job.kind === 'setup') {
-      notice(t('setup.complete'), 'success');
+      const youtubeOnly = (job.stages || []).length === 1 && job.stages[0] === 'youtube';
+      notice(t(youtubeOnly ? 'youtube.installed' : 'setup.complete'), 'success');
       store.setupJobAnnounced = job.id;
       show('new');
       return;

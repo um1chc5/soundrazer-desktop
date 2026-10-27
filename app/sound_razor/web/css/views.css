@@ -43,6 +43,10 @@
 .new-head .page-sub { max-width: 60ch; }
 .new-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 .source-card { display: flex; flex-direction: column; gap: 16px; }
+.yt-missing { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 10px 12px; border-radius: var(--radius); border: 1px solid rgba(255, 138, 61, .28); background: rgba(255, 138, 61, .08); font-size: 12.5px; color: var(--text-2); }
+.yt-missing[hidden] { display: none; }
+.yt-missing p { flex: 1; }
+.yt-missing .btn { flex-shrink: 0; }
 .source-card .trim-section { margin-top: 0; padding-top: 16px; border-top: 1px solid var(--line); }
 .source-card .card-step { margin-bottom: 0; }
 

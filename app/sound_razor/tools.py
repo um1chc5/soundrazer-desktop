@@ -9,9 +9,35 @@ import sys
 EXE = ".exe" if os.name == "nt" else ""
 
 
+def embedded_runtime() -> bool:
+    """True on the Windows installer's embeddable Python (it ships a python*._pth file).
+
+    That copy lives in Program Files, which the app can't write to without admin
+    rights, so whatever setup downloads goes to app_data_dir() instead.
+    """
+    return any(Path(sys.executable).resolve().parent.glob("python*._pth"))
+
+
+def app_data_dir() -> Path:
+    """Per-user folder for config, models and setup downloads (mirrors ui_entrypoint.py)."""
+    return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "SoundRazer Desktop"
+
+
+def packages_prefix() -> Path:
+    """pip --prefix for setup's packages on the embedded runtime. installer/soundrazer.pth
+    puts its Lib/site-packages on sys.path; keep the two in step."""
+    return app_data_dir() / "packages"
+
+
+def ffmpeg_dir() -> Path:
+    """Where setup unpacks FFmpeg: the app data folder on the embedded runtime, else the
+    install root next to the app (a writable portable folder on Linux and in dev)."""
+    return app_data_dir() / "ffmpeg" if embedded_runtime() else Path(__file__).resolve().parents[1]
+
+
 def _candidates():
     here = Path(__file__).resolve()
-    roots = [Path.cwd(), here.parents[1], here.parents[1], *Path(sys.executable).resolve().parents[:3]]
+    roots = [Path.cwd(), here.parents[1], ffmpeg_dir(), *Path(sys.executable).resolve().parents[:3]]
     for root in roots:
         yield root
         yield root / "ffmpeg" / "bin"

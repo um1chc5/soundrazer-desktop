@@ -126,7 +126,13 @@ export function renderNew() {
   const showYt = !!youtube && (jobPending(youtube) || store.pending?.jobId === youtube.id || youtube.status === 'failed' && store.pending?.failed === youtube.id);
   $('yt-panel').hidden = !showYt;
   if (showYt) renderProgress($('yt-panel'), youtube);
-  const ready = store.sourceMode === 'file' ? !!store.chosenFile : /^https?:\/\/\S+/.test($('youtube-url').value.trim());
+  // YouTube support is optional in first-run setup, so offer it here when it was skipped.
+  const ytMissing = !!store.state.setup?.stages?.find(s => s.id === 'youtube')?.missing;
+  const ytSetup = (store.state.jobs || []).find(j => j.kind === 'setup' && (j.stages || []).includes('youtube'));
+  $('yt-missing').hidden = !ytMissing;
+  $('yt-install').disabled = !!ytSetup;
+  $('yt-install').textContent = ytSetup ? t('youtube.installing', {pct: Math.floor(ytSetup.progress || 0)}) : t('youtube.install');
+  const ready = store.sourceMode === 'file' ? !!store.chosenFile : !ytMissing && /^https?:\/\/\S+/.test($('youtube-url').value.trim());
   // A running job no longer blocks this page: the new one waits in the queue.
   $('start').disabled = !ready || !store.state.root || store.busy || !pickerValid($('new-stems'));
   $('start').textContent = store.busy ? t('start.starting') : queueBusy() ? t('start.addToQueue') : t('start.button');
@@ -156,6 +162,11 @@ export function upload(file, data) {
     xhr.send(file);
   });
 }
+$('yt-install').onclick = async () => {
+  $('yt-install').disabled = true;
+  try { await api('/api/setup/start', {stages: ['youtube']}); await nav.refresh(); }
+  catch (error) { notice(error.message, 'error'); renderNew(); }
+};
 $('start').onclick = async () => {
   if (store.busy) return;
   if (store.state.setup?.required) { notice(t('setup.completeFirst'), 'error'); return; }

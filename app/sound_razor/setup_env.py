@@ -18,7 +18,7 @@ import zipfile
 from pathlib import Path
 from urllib.request import urlopen
 
-from .tools import EXE, ensure_ffmpeg_on_path, MISSING_FFMPEG
+from .tools import EXE, embedded_runtime, ensure_ffmpeg_on_path, ffmpeg_dir, packages_prefix, MISSING_FFMPEG
 
 # Mirrors installer/bootstrap.ps1: ffmpeg/ffprobe land next to the app folder
 # (install root), where tools.py already looks for them. The Windows build is a
@@ -74,8 +74,8 @@ def runtime_ok() -> bool:
 def ffmpeg_ok() -> bool:
     if shutil.which("ffmpeg") and shutil.which("ffprobe"):
         return True
-    install = _install_dir()
-    return (install / "ffmpeg.exe").is_file() and (install / "ffprobe.exe").is_file()
+    install = ffmpeg_dir()
+    return (install / f"ffmpeg{EXE}").is_file() and (install / f"ffprobe{EXE}").is_file()
 
 
 def _package_dir(name: str) -> Path | None:
@@ -288,7 +288,8 @@ def _install_ffmpeg(library, start_progress: int, band: int) -> int:
                     _log(library, f"Downloaded {received // (1024 * 1024)} MiB…")
         if expected is not None and received != expected:
             raise RuntimeError("Incomplete FFmpeg download. Retry setup.")
-        install = _install_dir()
+        install = ffmpeg_dir()
+        install.mkdir(parents=True, exist_ok=True)
         if sys.platform.startswith("linux"):
             _extract_ffmpeg_tar(archive, install)
         else:
@@ -313,8 +314,12 @@ def _pip_install(library, requirements: list[str], stage: str, start_progress: i
         if attempt:
             _log(library, "Damaged package metadata prevented uninstall; installing over it…")
         _log(library, f"pip install{' ' + ' '.join(options) if options else ''} {quoted}")
+        # The embedded runtime sits in read-only Program Files, where pip would quietly
+        # fall back to the shared per-user site (%APPDATA%\Python) that uninstall never
+        # cleans and other Pythons also read. Install into the app's own folder instead.
+        target = ["--prefix", str(packages_prefix()), "--no-warn-script-location"] if embedded_runtime() else []
         command = [sys.executable, "-m", "pip", "install", "--disable-pip-version-check",
-                   *options, *requirements]
+                   *target, *options, *requirements]
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                    text=True, errors="replace")
         with library.lock:
@@ -342,6 +347,7 @@ def _pip_install(library, requirements: list[str], stage: str, start_progress: i
                 process.kill()
         code = process.wait()
         if code == 0:
+            importlib.invalidate_caches()  # let this process find the new packages
             break
         retry = any("field larger than field limit" in line or "UninstallPathSet" in line
                     for line in output)
