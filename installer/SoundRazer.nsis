@@ -36,7 +36,7 @@
 !include "MUI2.nsh"
 
 !define NAME "SoundRazer Desktop"
-!define VERSION "1.1.1"
+!define VERSION "1.2.0"
 !define PACKAGE_NAME "SoundRazer-Setup-x64"
 !define REG_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${NAME}"
 !define ICON "..\assets\icon.ico"
@@ -96,7 +96,7 @@ Section "SoundRazer Desktop" SecMain
   WriteRegStr HKLM "${REG_KEY}" "Publisher" "SoundRazer Team"
   WriteRegStr HKLM "${REG_KEY}" "InstallLocation" "$INSTDIR"
   WriteRegDWORD HKLM "${REG_KEY}" "VersionMajor" 1
-  WriteRegDWORD HKLM "${REG_KEY}" "VersionMinor" 0
+  WriteRegDWORD HKLM "${REG_KEY}" "VersionMinor" 2
   WriteRegDWORD HKLM "${REG_KEY}" "NoModify" 1
   WriteRegDWORD HKLM "${REG_KEY}" "NoRepair" 1
 SectionEnd
