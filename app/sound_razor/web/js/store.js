@@ -1,5 +1,5 @@
 export const store = {
-  state: {root: null, default_root: null, projects: [], job: null, now: 0, setup: null},
+  state: {root: null, default_root: null, projects: [], jobs: [], active_job: null, job: null, now: 0, setup: null},
   view: 'new', selected: null, audioSignature: '', loading: 0, controller: null,
   busy: false, editing: null, deleting: null, browseParent: '', sourceMode: 'file',
   chosenFile: null, pending: null, resepOpen: false, announced: null,

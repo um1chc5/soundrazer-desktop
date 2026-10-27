@@ -45,11 +45,12 @@ function stemLabel(file, fallback) {
   return key ? t(key) : fallback;
 }
 function activeProject() { return store.state.projects.find(p => p.id === store.selected); }
-function jobRunning() { return store.state.job && ['running', 'cancelling'].includes(store.state.job.status); }
+function activeJob() { return store.state.active_job ? store.state.jobs.find(j => j.id === store.state.active_job) : store.state.job; }
+function jobRunning() { const job = activeJob(); return !!job && ['running', 'cancelling'].includes(job.status); }
 function projectUrl(id) { return `/api/projects/${encodeURIComponent(id)}`; }
 function fields(prefix) {
   const data = Object.fromEntries(['title', 'artist', 'album', 'year'].map(key => [key, $(`${prefix}-${key}`).value]));
   if (store.lookupSelections[prefix]) data.lookup_token = store.lookupSelections[prefix];
   return data;
 }
-export {$, token, el, notice, time, duration, serverNow, setClockSkew, sep, stem, api, activeProject, jobRunning, projectUrl, fields, stemLabel};
+export {$, token, el, notice, time, duration, serverNow, setClockSkew, sep, stem, api, activeJob, activeProject, jobRunning, projectUrl, fields, stemLabel};

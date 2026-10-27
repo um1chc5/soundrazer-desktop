@@ -42,3 +42,19 @@ def ensure_ffmpeg_on_path() -> bool:
 
 MISSING_FFMPEG = ("FFmpeg was not found. Install it (for example: winget install Gyan.FFmpeg) "
                   "or put ffmpeg.exe and ffprobe.exe in the SoundRazer folder, then restart the app.")
+
+
+def cpu_threads() -> int:
+    """Return inference thread count, leaving one core free for the server/UI.
+
+    Override with SOUND_RAZOR_THREADS env var. Falls back to 1 if cpu_count() is
+    unavailable.
+    """
+    override = os.environ.get("SOUND_RAZOR_THREADS")
+    if override:
+        try:
+            return max(1, int(override))
+        except ValueError:
+            pass
+    count = os.cpu_count() or 1
+    return max(1, count - 1)

@@ -8,12 +8,12 @@ SoundRazer Desktop is a local desktop stem separator with a Python backend and v
 |---:|---|---|---|
 | 01 | [App specification](01-app.md) | Done | Describes current behavior and architecture, implemented project fields, and the current layout after the module refactor. |
 | 02 | [Pre-separation trim](02-pre-separation-trim.md) | Done | Overall and guitar-section trim, project-timeline offsets, offset-aware playback, trim editors, and CLI/API support are implemented. |
-| 03 | [Output formats](03-output-formats.md) | Done | Export job, six-format FFmpeg matrix, staging, manifest, reveal route, dialog, and progress are implemented. Canonical stored stems remain 44.1 kHz stereo WAV. |
+| 03 | [Output formats](03-output-formats.md) | Done | Export job, six-format FFmpeg matrix, staging, manifest, reveal route, dialog, and progress are implemented. Canonical stored stems are FLAC (lossless, ~40–50% smaller than WAV). |
 | 04 | [First-run setup](04-first-run-setup.md) | Doing | In-app checklist, per-stage progress, optional YouTube toggle, and setup gating exist. Installer/bootstrap consent and the full “setup as the main UI” visual merge remain. |
-| 05 | [Job queue and concurrency](05-job-queue.md) | Todo | One job at a time, with a second request rejected outright. Plan: queue sequentially, then an optional configurable concurrency cap. |
-| 06 | [Close behavior](06-close-behavior.md) | Todo | Closing the window silently destroys a running job and leaves staging directories behind. Plan: confirm-on-close, clean cancel, stale-directory sweep. Resume was considered and rejected. |
-| 07 | [Disk usage and cache](07-disk-usage.md) | Doing | Model cache is bounded (~455 MB); projects grow ~9x per song as lossless WAV. Plan: switch canonical stems to FLAC (~40–50% smaller, lossless), uninstall prompt for models, disk precheck, cleanup UI. |
-| 08 | [Performance and hidden optimizations](08-performance.md) | Todo | Guitar split is pinned to 4 threads on all machines; every stem is written 3x (~485 MB avoidable I/O per job). Measured wins available. |
+| 05 | [Job queue and concurrency](05-job-queue.md) | Done (Phase 1) | Jobs are enqueued and run one at a time instead of rejected; `/api/state` returns a job list. Phase 2 (configurable concurrency cap) remains optional. |
+| 06 | [Close behavior](06-close-behavior.md) | Done (Phase 1) | Confirm-on-close dialog, clean cancel with orphan prevention, and stale-staging-directory sweep at startup. Resume rejected; optional job-state persistence remains. |
+| 07 | [Disk usage and cache](07-disk-usage.md) | Done (Phase 1) | Canonical stems switched from WAV to FLAC (~40–50% smaller, lossless); stale-staging-directory sweep at startup. Uninstall model-cache prompt, disk precheck, cleanup UI remain. |
+| 08 | [Performance and hidden optimizations](08-performance.md) | Done (Items 1–2) | CPU-derived thread count replaces hardcoded 4 threads in both RoFormer and Demucs/MDX paths; separator writes directly into project staging, eliminating one redundant full stem-set copy per job (~485 MB saved). Remaining: benchmarking, Windows Defender measurement. |
 | — | Web module/CSS refactor | Done | ES modules are under `web/js/`; five CSS files are under `web/css/`; static serving uses generic safe handling. |
 | — | Python package refactor | Done | Split into `audio/`, `projects/`, and `webui/` is complete; package-layout smoke tests pass. |
 

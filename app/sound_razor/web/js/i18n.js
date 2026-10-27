@@ -283,6 +283,9 @@ const STRINGS = {
   'dialog.export.clipWarning': {en: 'Stems that peak above full scale will clip in lossy formats.', vi: 'Track có đỉnh âm vượt mức tối đa sẽ bị clip khi xuất ở định dạng nén.'},
   'dialog.export.successMsg': {en: 'Export complete. The selected copies are ready.', vi: 'Xuất tệp hoàn tất. Các bản sao đã chọn đã sẵn sàng.'},
   'dialog.export.openExportsFolder': {en: 'Open exports folder', vi: 'Mở thư mục xuất'},
+  'dialog.closeConfirm.title': {en: 'Close while splitting?', vi: 'Đóng khi đang tách?'},
+  'dialog.closeConfirm.message': {en: 'A separation or download is running. Closing will cancel it.', vi: 'Một quá trình tách nhạc hoặc tải xuống đang chạy. Đóng sẽ hủy nó.'},
+  'dialog.closeConfirm.closeAnyway': {en: 'Close anyway', vi: 'Vẫn đóng'},
 
   'folders.noSubfolders': {en: 'No subfolders. You can select this folder.', vi: 'Không có thư mục con. Bạn có thể chọn thư mục này.'},
   'folders.savingDefault': {en: 'Saving to the default output folder.', vi: 'Đang lưu vào thư mục mặc định.'},
@@ -324,6 +327,7 @@ const STRINGS = {
   'nav.splittingGuitar': {en: 'Splitting guitar', vi: 'Đang tách guitar'},
   'nav.separating': {en: 'Separating', vi: 'Đang tách nhạc'},
   'nav.jobPillText': {en: '{what} · {pct}%', vi: '{what} · {pct}%'},
+  'nav.jobQueued': {en: '{count} queued', vi: '{count} đang xếp hàng'},
   'nav.exportedNotice': {en: 'Exported {count} stems as {formats}.', vi: 'Đã xuất {count} track dưới dạng {formats}.'},
   'nav.songReadyNotice': {en: '{title} is ready: {count} stems saved.', vi: '{title} đã sẵn sàng: đã lưu {count} track.'},
   'nav.defaultSongTitle': {en: 'Song', vi: 'Bài hát'},

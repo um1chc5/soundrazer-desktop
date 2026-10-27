@@ -1,4 +1,4 @@
-import {$, notice, api, jobRunning, activeProject, setClockSkew} from './core.js';
+import {$, notice, api, activeJob, jobRunning, activeProject, setClockSkew} from './core.js';
 import {store, nav} from './store.js';
 import {clearAudio} from './audio.js';
 import {renderNew, continuePending} from './views/new.js';
@@ -52,11 +52,15 @@ export function render() {
 }
 export function renderChrome() {
   $('project-count').textContent = store.state.projects.length;
-  const job = store.state.job, pill = $('job-pill');
-  pill.hidden = !jobRunning();
+  const job = activeJob(), pill = $('job-pill');
+  const queued = (store.state.jobs || []).filter(j => j.position > 0).length;
+  pill.hidden = !jobRunning() && queued === 0;
   if (jobRunning()) {
     const what = job.kind === 'youtube' ? t('nav.downloading') : job.kind === 'setup' ? t('nav.settingUp') : job.kind === 'export' ? t('nav.exporting') : job.guitar_split ? t('nav.splittingGuitar') : t('nav.separating');
-    $('job-pill-text').textContent = t('nav.jobPillText', {what, pct: Math.floor(job.progress || 0)});
+    const tail = queued ? ` • ${queued} waiting` : '';
+    $('job-pill-text').textContent = t('nav.jobPillText', {what, pct: Math.floor(job.progress || 0)}) + tail;
+  } else if (queued) {
+    $('job-pill-text').textContent = t('nav.jobQueued', {count: queued});
   }
 }
 $('job-pill').onclick = () => { const job = store.state.job; if (job?.project) selectProject(job.project); else show('new'); };

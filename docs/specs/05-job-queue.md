@@ -1,6 +1,6 @@
 # 05 — Job queue and concurrency
 
-Status: Todo
+Status: Done (Phase 1)
 
 What this covers: why only one job runs at a time, what the real limit is, and the
 planned change from *rejecting* concurrent requests to *queueing* them (with an
@@ -57,42 +57,25 @@ with audio length — realistically **1.5–2.5 GB resident per job**.
 Two phases. Phase 1 alone removes most of the friction and keeps the resource profile
 identical.
 
-### Phase 1 — Queue (recommended first)
+### Phase 1 — Queue (done)
 
-Replace rejection with a FIFO queue that runs **one job at a time**.
+Replace rejection with a FIFO queue that runs **one job at a time**. Implemented on branch `dev/new-specs`:
 
-- `self.job` / `self.process` / `self.worker` become a list of job records (or a
-  `queue.Queue` of pending work plus a single active record).
-- A single worker thread drains the queue sequentially, so peak memory and CPU are
-  unchanged from today.
-- `/api/state` returns `"jobs": [...]` plus the active job id.
-- The frontend renders a list: pending items show position and "Waiting…", the active
-  item shows the existing progress bar. Replace the six `store.state.job` reads.
-- Cancelling a *pending* item just removes it from the queue; cancelling the active
-  item uses the existing `cancel()` path.
-- Keep per-job `logs` — move from one shared deque to per-job buffers so progress
-  lines stay attributable.
+- `self.job` / `self.process` / `self.worker` replaced by `queue` (pending job records) plus a single `active` record, drained by one worker thread — peak memory and CPU unchanged.
+- `/api/state` returns `"jobs": [...]` plus `"active_job"`; a `job` shim field is kept for frontend compatibility.
+- Frontend reads `store.state.jobs` / `store.state.active_job` via `jobRunning()`; the job pill shows the queued count.
+- Cancelling a pending item removes it from the queue; cancelling the active item uses the existing `cancel()` path (`os.killpg` / `terminate`, then `SIGKILL` after 5 s).
+- Per-job logs moved from one shared deque to per-job buffers keyed by job id.
+- Requests return immediately with a job id; the HTTP thread never blocks waiting for a queue slot.
+- `worker` attribute removed (no longer used); `server.py` joins the drainer thread on shutdown.
 
-### Phase 2 — Configurable concurrency cap (optional, later)
-
-- Add a `max_concurrent_jobs` setting (default **1**).
-- Derive a *suggested* default: `1` on CPU, `2–3` when `torch.cuda.is_available()`,
-  and never more than `max(1, available_ram_gb // 3)`.
-- Surface it in the UI as an advanced setting with an explicit warning that each job
-  needs ~1.5–2.5 GB.
+Per-job logs are now keyed by job id, so progress lines stay attributable.
 
 ## Remaining work
 
-- [ ] Decide queue depth limit (or make it unbounded).
-- [ ] Convert `job`/`process`/`worker`/`logs` from scalars to collections.
-- [ ] Change `/api/state` to return a job list; keep a `job` field for one release as
-      a compatibility shim if needed.
-- [ ] Update the six frontend `store.state.job` call sites to render a list.
-- [ ] Decide what happens to queued jobs when the window closes (see
-      [06 — Close behavior](06-close-behavior.md)).
-- [ ] Optional Phase 2: `max_concurrent_jobs` setting with a derived default.
-- [ ] Test: queue three separations, cancel the middle one, confirm ordering holds and
-      the active job is unaffected.
+- [ ] Phase 2 (optional, later): `max_concurrent_jobs` setting with a derived default (`1` on CPU, `2–3` with CUDA, capped by RAM), surfaced as an advanced setting with a warning.
+- [ ] Decide what happens to queued jobs when the window closes (see [06 — Close behavior](06-close-behavior.md)).
+- [ ] Queue depth limit: currently unbounded; decide whether to cap it.
 
 ## Constraints
 

@@ -147,18 +147,30 @@ def describe_project(path: Path) -> dict:
         order.update({f"guitar-target-{i}": 1 + i / (len(split) + 2) for i in range(1, len(split or []) + 1)})
         order["guitar-remainder"] = 1.99
         for p in sorted(stems_dir.iterdir(), key=lambda p: (order.get(p.stem, 99), p.name)):
-            if (p.name == 'guitar.wav' and separation.get('lead_rhythm_split')
-                    and all((stems_dir / name).is_file() and not (stems_dir / name).is_symlink()
-                            for name in ('lead.wav', 'rhythm.wav'))):
+            stem_name = p.stem
+            ext = p.suffix.lower()
+            if ext not in (".wav", ".flac") or not p.is_file() or p.is_symlink():
                 continue
-            if p.is_file() and not p.is_symlink() and p.suffix.lower() == ".wav":
-                if p.name == "guitar.wav" and split and (stems_dir / "guitar-target-1.wav").is_file():
-                    continue  # Retain the unsplit source on disk without doubling playback.
-                trim = split_trim if is_guitar_split_stem(p.stem) else separation_trim
-                name = labels.get(p.stem, p.stem)
-                stems.append({"name": name[:1].upper() + name[1:], "file": p.name, "bytes": p.stat().st_size,
-                              "version": p.stat().st_mtime_ns,
-                              "offset": float(trim["start"]) if trim else 0.0})
+            # Skip guitar.wav/guitar.flac when superseded by lead+rhythm or by split targets.
+            if stem_name == 'guitar':
+                superseded = False
+                if separation.get('lead_rhythm_split'):
+                    lead_exists = any((stems_dir / f"lead{e}").is_file() for e in (".wav", ".flac"))
+                    rhythm_exists = any((stems_dir / f"rhythm{e}").is_file() for e in (".wav", ".flac"))
+                    if lead_exists and rhythm_exists:
+                        superseded = True
+                if not superseded and split:
+                    target_exists = any((stems_dir / f"guitar-target-{i}{e}").is_file()
+                                        for i in range(1, len(split) + 1) for e in (".wav", ".flac"))
+                    if target_exists:
+                        superseded = True
+                if superseded:
+                    continue
+            trim = split_trim if is_guitar_split_stem(stem_name) else separation_trim
+            name = labels.get(stem_name, stem_name)
+            stems.append({"name": name[:1].upper() + name[1:], "file": p.name, "bytes": p.stat().st_size,
+                          "version": p.stat().st_mtime_ns,
+                          "offset": float(trim["start"]) if trim else 0.0})
     cover = cover_path(path, data)
     return {"id": path.name, **fields, "cover": cover.name if cover else None,
             "title": fields["title"] or (Path(original).stem if original else path.name),

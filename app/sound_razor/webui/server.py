@@ -147,7 +147,12 @@ def make_server(library: Library, port: int = 8765):
                         enrichment = library.lookup.get(query['lookup_token']) if query.get('lookup_token') else None
                         return import_project(root, upload, query.get("filename", ""), query, enrichment)
             if method == "POST" and path == "/api/cancel":
-                library.cancel()
+                try:
+                    data = self.json_body()
+                except ValueError:
+                    data = {}
+                job_id = data.get("job_id") if isinstance(data, dict) else None
+                library.cancel(job_id)
                 return {"ok": True}
             if path.startswith("/api/window/"):
                 action = path[len("/api/window/"):]
@@ -202,7 +207,7 @@ def make_server(library: Library, port: int = 8765):
                         if name not in allowed:
                             raise ValueError("Stem not found.")
                         audio = project / "stems" / name
-                        content_type = "audio/wav"
+                        content_type = "audio/flac" if name.endswith(".flac") else "audio/wav"
                         # Open while holding the lock, before a completed job swaps directories.
                         handle = audio.open("rb")
                     elif original_route:
@@ -253,6 +258,6 @@ def serve(projects: Path | None, port: int, cache: Path, window=None, config: Pa
         pass
     finally:
         library.cancel()
-        if library.worker:
-            library.worker.join(timeout=8)
+        if library._drainer and library._drainer.is_alive():
+            library._drainer.join(timeout=8)
         server.server_close()

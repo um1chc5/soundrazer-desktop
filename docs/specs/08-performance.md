@@ -1,6 +1,6 @@
 # 08 — Performance and hidden optimizations
 
-Status: Todo
+Status: Done (Items 1–2)
 
 What this covers: "background" maintenance and performance work that is invisible in
 the UI but affects how fast jobs run and how much the app writes to disk. Complements
@@ -32,9 +32,10 @@ Also relevant: Demucs/MDX inference in `audio_separator` never sets thread count
 all, so it falls back to PyTorch's default (= all cores). That is fine on a dedicated
 machine but means a separation job can starve the UI thread.
 
-**Planned:** set threads to `max(1, os.cpu_count() - 1)` (leave one core for the
-server/UI), make it overridable by an env var, and apply it consistently to both the
-RoFormer and Demucs/MDX paths.
+**Done:** threads set to `max(1, os.cpu_count() - 1)` via `cpu_threads()` in `tools.py`,
+overridable with `SOUND_RAZOR_THREADS` env var. Applied consistently to both the RoFormer
+path (`guitar_split.py`) and the Demucs/MDX path (`pipeline.py` calls
+`torch.set_num_threads(cpu_threads())` before creating the separator).
 
 ## 2. Redundant stem I/O: every stem is written three times (verified)
 
@@ -56,11 +57,11 @@ Half a gigabyte of avoidable writes per job. The staging step itself is correct 
 comment explains it exists so replacement never falls back to copying over an existing
 file that might be a link — but step 1 → 2 is pure duplication.
 
-**Planned:** have `audio_separator` write **directly into the project-local staging
-dir** (`output_dir=str(stage)`), eliminating the temp copy. Staging must be created
-before inference and cleaned up on failure. Verify the separator tolerates an
-`output_dir` inside the project and that `combine_other()`'s in-place `replace()`
-still works (it already writes to a sibling temp file for this reason).
+**Done:** `audio_separator` now writes directly into the project-local staging dir
+(`output_dir=str(stage)`), eliminating the temp-dir copy. Staging is created before
+inference and cleaned up on failure (via `TemporaryDirectory`). `combine_other()`
+still works — it writes to a sibling temp file within staging and replaces onto the
+final stem in staging, then everything is atomically `replace()`d onto the destination.
 
 ## 3. Small-file churn on Windows (hypothesis)
 
@@ -115,12 +116,8 @@ noted so it is not mistaken for app bloat.
 
 ## Remaining work
 
-- [ ] Replace the hardcoded `set_num_threads(4)` with a CPU-derived value and an env
-      override; apply consistently across RoFormer and Demucs/MDX paths.
-- [ ] Benchmark a real guitar split at 4 vs 12 threads to confirm the matmul proxy
-      translates to wall-clock savings.
-- [ ] Eliminate the temp-dir copy by writing the separator output directly into the
-      project staging dir; confirm failure cleanup and `combine_other()` still work.
+- [ ] Benchmark a real guitar split at 4 vs CPU-derived threads to confirm the matmul
+      proxy translates to wall-clock savings.
 - [ ] Measure the effect on a real Windows install (Defender scanning) if one is
       available.
 - [ ] Do **not** add a worker-process pool for imports; measured cost is ~1.1 s.

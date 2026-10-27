@@ -185,11 +185,11 @@ export function renderTracks() {
   $('tracks').replaceChildren();
   for (const [index, track] of player.tracks.entries()) {
     const isOriginal = track.file === ORIGINAL_FILE;
-    const color = isOriginal ? ORIGINAL_COLOR : (STEMS.find(([value]) => `${value}.wav` === track.file)?.[2] || colors[index % colors.length]);
+    const color = isOriginal ? ORIGINAL_COLOR : (STEMS.find(([value]) => `${value}.flac` === track.file)?.[2] || colors[index % colors.length]);
     const row = el('div', isOriginal ? 'track track-original' : 'track'); row.style.setProperty('--track-color', color);
     const label = el('div'); label.append(el('div', 'track-name', track.name[0].toUpperCase() + track.name.slice(1)),
       el('div', 'track-detail', `${track.buffer.numberOfChannels === 1 ? 'MONO' : 'STEREO'} · ${time(track.buffer.duration)}`));
-    if (track.file === 'guitar.wav') {
+    if (track.file === 'guitar.flac') {
       const split = el('button', 'split-guitar');
       split.type = 'button'; split.title = t('audio.splitGuitarTitle');
       split.setAttribute('aria-label', t('audio.splitGuitarTitle'));

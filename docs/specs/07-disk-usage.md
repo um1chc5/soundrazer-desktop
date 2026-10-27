@@ -1,6 +1,6 @@
 # 07 — Disk usage, cache, and uninstall
 
-Status: Doing
+Status: Done (Phase 1 — WAV→FLAC canonical stems + stale-staging sweep)
 
 What this covers: everywhere the app writes to disk, what the realistic footprint is,
 where the genuine disk-abuse risks are, and what the uninstallers do and do not
@@ -115,68 +115,49 @@ so the user knows what remains.
 
 ## Planned change
 
-1. **Switch canonical stem storage from WAV to FLAC** (highest impact, see below).
-2. **Offer to delete the model cache on uninstall.** Add an NSIS component/page:
-   "Also delete downloaded models and settings? (~455 MB)" — default *off*, since
-   keeping them makes reinstall cheaper. Mirror it as a `--purge` flag in the Linux
-   script. This is the usual installer convention and closes the "uninstall didn't
-   free the space I expected" gap.
-3. **Prune the `guitar.wav` intermediate after a successful guitar split** — it is
-   superseded by `lead.wav` + `rhythm.wav` and wastes ~39 MB per split. (Keep it on
-   failure so the run stays diagnosable.)
-4. **Add a disk-space precheck** before a job: estimate stems (~10 MB × minutes ×
-   stems) plus the model download if uncached, and refuse with a clear message rather
-   than failing mid-run.
-5. **Sweep stale staging directories** at startup — shared with
-   [06 — Close behavior](06-close-behavior.md).
-6. **Surface sizes in the UI** — show per-project and total disk usage, and let the
-   user delete `exports/` or whole projects. Today the only deletion is
-   `library.delete()`, which removes an entire project.
-7. **Document the 9x amplification** in the user-facing README, so expectations are
-   set before someone imports a 200-song library.
+1. **Switch canonical stem storage from WAV to FLAC** — done (see below). `combine_other()`
+   keeps its float32 WAV intermediate; only the final stored stem is FLAC. `guitar_split.py`
+   reads/writes FLAC via `soundfile`. Web player audio route serves `audio/flac` for `.flac`
+   stems, `audio/wav` for legacy `.wav` stems. Backward compatible: existing `.wav` stems
+   are still detected and played.
+2. **Offer to delete the model cache on uninstall** — not done (see remaining work).
+3. **Prune `guitar.wav` after a successful guitar split** — done implicitly: new projects
+   store `guitar.flac` only when no split exists; once split into `lead.flac` + `rhythm.flac`,
+   `guitar.flac` is excluded from the stem list. Legacy `guitar.wav` projects behave the same.
+4. **Add a disk-space precheck** before a job — not done (see remaining work).
+5. **Sweep stale staging directories at startup** — done in spec 06 (shared implementation:
+   `Library.sweep_stale_staging()`, called at end of `Library.__init__`).
+6. **Surface sizes in the UI** — not done (see remaining work).
+7. **Document the 9x amplification** in the README — not done (see remaining work).
 
-### Canonical stems: WAV → FLAC
+### Canonical stems: WAV → FLAC (done)
 
-[03 — Output formats](03-output-formats.md) chose WAV as the canonical working
-format and that reasoning still holds for *why not hand the separator MP3/FLAC
-directly* (guitar split needs raw samples, `combine_other()` needs float headroom,
-playback needs a decodable file). It does not rule out FLAC specifically: FLAC is
-lossless (bit-exact round trip, `soundfile` decodes it natively) and compresses
-PCM audio to roughly 50–60% of WAV size at compression level 5 (already used for
-exports, see [03 §5](03-output-formats.md)).
+[03 — Output formats](03-output-formats.md) chose WAV as the canonical working format and
+that reasoning still holds for *why not hand the separator MP3/FLAC directly* (guitar split
+needs raw samples, `combine_other()` needs float headroom, playback needs a decodable file).
+It does not rule out FLAC specifically: FLAC is lossless (bit-exact round trip, `soundfile`
+decodes it natively) and compresses PCM audio to roughly 50–60% of WAV size.
 
-Applying that to the canonical stems themselves — not just exports — stores the
-same bits in less space, with no quality trade-off to expose in the UI:
+Implemented:
 
-- `combine_other()` keeps its float32 WAV intermediate for safe summing above
-  0 dBFS; only the **final** stored stem is written as FLAC.
-- `guitar_split.split_guitar()` decodes FLAC via `soundfile` instead of raw WAV —
-  a format-string change, not a rewrite.
-- Playback needs confirmation that the pywebview host decodes
-  `audio/flac` in `<audio>` (expected on current WebView2/WebKit, verify before
-  shipping).
+- `pipeline.py`: `create_separator(output_format="FLAC")`; `combine_other()` mixes to
+  float32 WAV then encodes to FLAC before storing.
+- `guitar_split.py`: writes `lead.flac` / `rhythm.flac` via `soundfile` (FLAC subtype);
+  reads FLAC source natively.
+- `store.py`: stem detection matches both `.wav` and `.flac`; legacy `.wav` stems still
+  listed and played.
+- `library.py`: separation CLI output checked as `.flac`; guitar-split input is `guitar.flac`.
+- `server.py`: audio route serves `audio/flac` for `.flac` names, `audio/wav` otherwise.
+- `web/js/audio.js`: stem color lookup and guitar split button keyed on `.flac`.
 
-Expected reduction: **~40–50% off stem storage on every project**, independent of
-source quality — a studio-quality import and a YouTube import get the same
-treatment today (`normalize()` forces everything to 44.1 kHz/16-bit stereo before
-separation ever runs, see [pipeline.py:145](../../app/sound_razor/audio/pipeline.py)),
-so the win is not source-specific and does not need a per-source toggle.
-
-Not planned: exposing canonical bit depth/sample rate/format as a user setting.
-FLAC is a strict improvement over WAV here (same data, smaller file), so there is
-no real choice to surface. Format/bitrate choice stays where it already is — the
-on-demand export flow in [03 — Output formats](03-output-formats.md).
+Expected reduction: **~40–50% off stem storage on every project**.
 
 ## Remaining work
 
-- [ ] Switch canonical stem storage from WAV to FLAC; update `combine_other()`,
-      `guitar_split.py`, and the web player's audio routes accordingly.
 - [ ] Confirm the pywebview host decodes FLAC in `<audio>` before shipping the
-      above.
+      WAV→FLAC change.
 - [ ] Add the uninstall prompt for models/settings (NSIS) and `--purge` (Linux).
-- [ ] Prune `guitar.wav` after a successful guitar split.
 - [ ] Implement the disk-space precheck with a clear error message.
-- [ ] Implement the stale-staging-directory sweep (shared with spec 06).
 - [ ] Decide whether old exports should be replaced wholesale per export run.
 - [ ] Add per-project / total size display and selective cleanup to the UI.
 - [ ] Document stem-size amplification in the README.

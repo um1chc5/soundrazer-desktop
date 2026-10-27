@@ -5,7 +5,6 @@ import importlib.util
 import logging
 import json
 import math
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -14,7 +13,7 @@ from pathlib import Path
 from .sources import youtube_audio
 from .model_cache import create_separator
 from .output_files import validate_outputs
-from ..tools import MISSING_FFMPEG, ensure_ffmpeg_on_path
+from ..tools import MISSING_FFMPEG, ensure_ffmpeg_on_path, cpu_threads
 
 DEFAULT_MODEL = "htdemucs_6s.yaml"
 VOCAL_MODEL = "UVR_MDXNET_KARA_2.onnx"
@@ -73,7 +72,13 @@ def combine_other(by_stem: dict[str, Path], model_stems: tuple[str, ...],
             "-filter_complex", f"amix=inputs={len(names)}:duration=longest:normalize=0",
             "-c:a", "pcm_f32le", str(mixed),
         ], check=True, stdout=sys.stderr)
-        mixed.replace(destination)
+        # Store the final Other stem as FLAC (lossless, ~50% smaller than WAV).
+        flac = Path(temporary) / "other.flac"
+        subprocess.run([
+            "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+            "-i", str(mixed), "-c:a", "flac", str(flac),
+        ], check=True, stdout=sys.stderr)
+        flac.replace(destination)
 
 
 def probe_duration(path: Path) -> float:
@@ -172,7 +177,7 @@ def separate(source: str, output: Path | None = None, model: str | None = None,
     output = output_directory(source, output, youtube)
     original = None if youtube else Path(source).expanduser().resolve()
     settings = output / "separation.json"
-    validate_outputs(original, [output / f"{stem}.wav" for stem in selected_stems or ()] + [settings])
+    validate_outputs(original, [output / f"{stem}.flac" for stem in selected_stems or ()] + [settings])
     if not ensure_ffmpeg_on_path():
         raise RuntimeError(MISSING_FFMPEG)
     if importlib.util.find_spec("audio_separator") is None:
@@ -181,6 +186,9 @@ def separate(source: str, output: Path | None = None, model: str | None = None,
         raise RuntimeError('Install YouTube support: pip install -e ".[youtube]"')
     cache = cache.expanduser().resolve()
     cache.mkdir(parents=True, exist_ok=True)
+    import torch
+    torch.set_num_threads(cpu_threads())
+    
     with tempfile.TemporaryDirectory(prefix="sound-razor-") as temporary:
         work = Path(temporary)
         audio = youtube_audio(source, work) if youtube else Path(source).expanduser().resolve()
@@ -189,43 +197,43 @@ def separate(source: str, output: Path | None = None, model: str | None = None,
         # Phase markers below are parsed by the UI for its progress display.
         print("Preparing audio", file=sys.stderr, flush=True)
         normalize(audio, normalized, saved_trim)
-        print(f"Loading model {model}", file=sys.stderr, flush=True)
-        # Upstream progress/prints must not corrupt the JSON result on stdout.
-        with contextlib.redirect_stdout(sys.stderr):
-            separator = create_separator(
-                output_dir=str(work), output_format="WAV",
-                model_file_dir=str(cache), log_level=logging.WARNING,
-                mdx_params={"hop_length": 1024, "segment_size": 256,
-                            "overlap": 0.25, "batch_size": 1, "enable_denoise": False},
-                demucs_params={"segment_size": "Default", "shifts": 0,
-                               "overlap": 0.25, "segments_enabled": True},
-            )
-            separator.load_model(model_filename=model)
-            print(f"Separating with {model}; stems: "
-                  f"{', '.join(selected_stems) if selected_stems else 'all model outputs'}", file=sys.stderr)
-            names = {stem: stem for stem in MODEL_STEMS.get(model, ())}
-            results = separator.separate(str(normalized), custom_output_names=names or None)
-            del separator
-        print("Writing stems", file=sys.stderr, flush=True)
-        paths = [Path(name) if Path(name).is_absolute() else work / name for name in results]
-        if len(paths) < 2 or any(not path.is_file() or path.stat().st_size <= 44 for path in paths):
-            raise RuntimeError("Separator did not produce valid stem files.")
-        if selected_stems is not None:
-            by_stem = {path.stem: path for path in paths}
-            missing = set(selected_stems) - set(by_stem)
-            if missing:
-                raise RuntimeError(f"Model did not produce requested stems: {', '.join(sorted(missing))}")
-            combine_other(by_stem, MODEL_STEMS.get(model, ()), selected_stems)
-            paths = [by_stem[stem] for stem in selected_stems]
-        # Persist requested stems, with unselected parts folded into Other when requested.
-        destinations = [output / path.name for path in paths]
-        validate_outputs(original, destinations + [settings])
-        # Stage on the destination filesystem so replacement never falls back to
-        # copying over an existing file (which could be a link to another file).
+
+        # Create staging on the destination filesystem BEFORE inference so the
+        # separator writes stems directly there, eliminating the redundant
+        # temp-dir copy (one fewer full stem-set write per job).
         with tempfile.TemporaryDirectory(prefix=".stems-", dir=output) as staged:
             stage = Path(staged)
-            for path in paths:
-                shutil.copyfile(path, stage / path.name)
+            print(f"Loading model {model}", file=sys.stderr, flush=True)
+            # Upstream progress/prints must not corrupt the JSON result on stdout.
+            with contextlib.redirect_stdout(sys.stderr):
+                separator = create_separator(
+                    output_dir=str(stage), output_format="FLAC",
+                    model_file_dir=str(cache), log_level=logging.WARNING,
+                    mdx_params={"hop_length": 1024, "segment_size": 256,
+                                "overlap": 0.25, "batch_size": 1, "enable_denoise": False},
+                    demucs_params={"segment_size": "Default", "shifts": 0,
+                                   "overlap": 0.25, "segments_enabled": True},
+                )
+                separator.load_model(model_filename=model)
+                print(f"Separating with {model}; stems: "
+                      f"{', '.join(selected_stems) if selected_stems else 'all model outputs'}", file=sys.stderr)
+                names = {stem: stem for stem in MODEL_STEMS.get(model, ())}
+                results = separator.separate(str(normalized), custom_output_names=names or None)
+                del separator
+            print("Writing stems", file=sys.stderr, flush=True)
+            paths = [stage / Path(name).name for name in results]
+            if len(paths) < 2 or any(not path.is_file() or path.stat().st_size <= 44 for path in paths):
+                raise RuntimeError("Separator did not produce valid stem files.")
+            if selected_stems is not None:
+                by_stem = {path.stem: path for path in paths}
+                missing = set(selected_stems) - set(by_stem)
+                if missing:
+                    raise RuntimeError(f"Model did not produce requested stems: {', '.join(sorted(missing))}")
+                combine_other(by_stem, MODEL_STEMS.get(model, ()), selected_stems)
+                paths = [by_stem[stem] for stem in selected_stems]
+            # Persist requested stems, with unselected parts folded into Other when requested.
+            destinations = [output / path.name for path in paths]
+            validate_outputs(original, destinations + [settings])
             settings_value = {"stems": selected_stems}
             if saved_trim is not None:
                 settings_value["trim"] = {"start": saved_trim[0], "end": saved_trim[1]}

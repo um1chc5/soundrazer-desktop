@@ -1,6 +1,6 @@
 # 06 — Close behavior and interrupted jobs
 
-Status: Todo
+Status: Done (Phase 1)
 
 What this covers: what happens when the window is closed while a job runs, why the
 result is currently lost, and the planned warning + cleanup. Includes an explicit
@@ -65,34 +65,23 @@ Why not resume:
   10 minutes; resuming saves ~2. The real fix is preventing the loss, not recovering
   it.
 
-## Planned change
+## Planned change — implemented (Phase 1)
 
-In priority order. Items 1–3 are the whole fix; item 4 is optional polish.
+In priority order, as spec'd:
 
-1. **Warn before closing while a job runs** — "A split is running. Closing will
-   cancel it." Block the close until the user confirms.
-2. **Cancel cleanly on close** — reuse the existing `cancel()` path (`os.killpg` with
-   `SIGTERM`, escalating to `SIGKILL` after a 5 s timeout on POSIX; `terminate()` /
-   `kill()` on Windows) so no orphaned child is left frozen on a dead pipe.
-3. **Sweep stale staging directories on startup** — remove `.separation-*`,
-   `.youtube-*`, `.import-*`, `.exports-*`, `.guitar-split-*`, `.stems-*`, and
-   `.model-download-*` directories older than a threshold (e.g. 24 h) inside the
-   projects root. Only ever remove directories matching these prefixes, and never
-   follow symlinks.
-4. **Optional:** persist minimal job state (id, project, status, started) so an
-   interrupted job can be reported on next launch ("Your last split was interrupted").
+1. **Warn before closing while a job runs** — the close button (`$('win-close')`) calls `/api/window/close`; if a job is running and no `confirm` flag is sent, the backend returns `{"confirm": true, "message": "..."}`. The frontend shows the `close-confirm-dialog` and only re-sends close with `{confirm: true}` after the user confirms. Implemented in `web/js/window.js` and `webui/library.py` `window_action("close")`.
+
+2. **Cancel cleanly on close** — confirmed close calls `library.cancel()` (existing `os.killpg`/`terminate`, then `SIGKILL` after 5 s), cancels all queued jobs, clears the queue, then closes the window. Implemented in `webui/library.py`.
+
+3. **Sweep stale staging directories on startup** — `Library.sweep_stale_staging()` removes `.separation-*`, `.youtube-*`, `.import-*`, `.exports-*`, `.guitar-split-*`, `.stems-*`, `.model-download-*` directories older than 24 h under the projects root. Only known prefixes, never follows symlinks, never outside the projects root. Called at end of `Library.__init__`. Implemented in `webui/library.py`.
+
+4. **Persist minimal job state** — not implemented (deferred, see remaining work).
 
 ## Remaining work
 
-- [ ] Add the confirm-on-close dialog (pywebview `on_closing`), gated on
-      `library.running()`.
-- [ ] Call `library.cancel()` from the close path and wait for the worker to exit
-      (bounded timeout) before destroying the window.
-- [ ] Implement the stale-staging-directory sweep at startup; log what it removes.
-- [ ] Verify no orphaned child process survives a close during an active separation.
-- [ ] Decide whether queued-but-not-started jobs (see
-      [05 — Job queue](05-job-queue.md)) are cancelled or retained on close.
-- [ ] Optional: persist and surface an "interrupted last run" notice.
+- [ ] Optional: persist minimal job state (id, project, status, started) so an interrupted job can be reported on next launch ("Your last split was interrupted").
+- [ ] Decide whether queued-but-not-started jobs are cancelled or retained on close (currently cancelled).
+- [ ] Verify no orphaned child process survives a close during an active separation (test on real Windows machine).
 
 ## Constraints
 

@@ -8,6 +8,7 @@ import tempfile
 from .model_cache import cached_download
 from .output_files import validate_outputs
 from .pipeline import parse_trim
+from ..tools import cpu_threads
 
 MODEL_URL = ('https://huggingface.co/noblebarkrr/mvsepless_resources/resolve/main/'
              'mel_band_roformer/mbr_lead_rhythm_guitar_listra92.ckpt')
@@ -24,7 +25,7 @@ def split_guitar(source: Path, output: Path, cache: Path, trim=None) -> list[Pat
     output = output.expanduser().resolve()
     if not source.is_file():
         raise ValueError('Separate the guitar track first.')
-    paths = [output/'lead.wav', output/'rhythm.wav']
+    paths = [output/'lead.flac', output/'rhythm.flac']
     settings_path = output/'separation.json'
     validate_outputs(source, paths + [settings_path])
     settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
@@ -62,7 +63,7 @@ def split_guitar(source: Path, output: Path, cache: Path, trim=None) -> list[Pat
     if sr != 44100 or mix.shape[1] != 2 or len(mix) == 0 or not np.isfinite(mix).all():
         raise ValueError('Guitar splitting requires a nonempty, finite stereo 44.1 kHz guitar stem.')
     weights = checkpoint(cache)
-    torch.set_num_threads(4)
+    torch.set_num_threads(cpu_threads())
     torch.manual_seed(42)
     config = json.loads((Path(__file__).resolve().parents[1] / 'vendor/roformer/lead_rhythm.json').read_text())
     config['multi_stft_resolutions_window_sizes'] = tuple(config['multi_stft_resolutions_window_sizes'])
@@ -112,8 +113,8 @@ def split_guitar(source: Path, output: Path, cache: Path, trim=None) -> list[Pat
         }
     with tempfile.TemporaryDirectory(prefix='.guitar-split-', dir=output) as temporary:
         stage = Path(temporary)
-        sf.write(stage/paths[0].name, lead, sr, subtype='FLOAT')
-        sf.write(stage/paths[1].name, mix-lead, sr, subtype='FLOAT')
+        sf.write(stage/paths[0].name, lead, sr)
+        sf.write(stage/paths[1].name, mix-lead, sr)
         (stage/settings_path.name).write_text(json.dumps(settings, indent=2)+'\n')
         validate_outputs(source, paths + [settings_path])
         for path in paths + [settings_path]:

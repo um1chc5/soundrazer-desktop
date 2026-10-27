@@ -1,4 +1,5 @@
 import {$, api, notice} from './core.js';
+import {store, nav} from './store.js';
 import {t} from './i18n.js';
 /* ---------- Desktop window chrome (frameless pywebview only) ---------- */
 // Routed through our own HTTP API (POST/GET /api/window/<action>), same as everything
@@ -77,5 +78,21 @@ export function initTitlebar() {
     $('win-max').title = $('win-max').ariaLabel = maximized ? t('titlebar.restore') : t('titlebar.maximize');
     $('win-max').disabled = false;
   };
-  $('win-close').onclick = () => windowAction('close');
+  let closePending = false;  // set when the backend asks for close confirmation
+
+$('win-close').onclick = async () => {
+  if (closePending) { await windowAction('close', {confirm: true}); return; }
+  const result = await windowAction('close');
+  if (result?.confirm) {
+    closePending = true;
+    $('close-confirm-message').textContent = result.message || t('dialog.closeConfirm.message');
+    $('close-confirm-dialog').showModal();
+  }
+};
+$('close-confirm-submit').onclick = async event => {
+  event.preventDefault();
+  closePending = false;
+  $('close-confirm-dialog').close();
+  await windowAction('close', {confirm: true});
+};
 }
