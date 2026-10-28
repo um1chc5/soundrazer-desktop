@@ -36,13 +36,17 @@
 !include "MUI2.nsh"
 
 !define NAME "Unweave"
-!define VERSION "1.3.0"
+!define VERSION "1.3.1"
 !define PACKAGE_NAME "Unweave-Setup-x64"
 !define REG_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${NAME}"
 ; The app was called SoundRazer Desktop up to 1.2.2 (see .onInit).
 !define LEGACY_NAME "SoundRazer Desktop"
 !define LEGACY_REG_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${LEGACY_NAME}"
 !define ICON "..\assets\icon.ico"
+
+; Build the no-console launcher (launcher.nsi) first; the main section packs it.
+!system 'if not exist build mkdir build'
+!system '"${NSISDIR}\makensis.exe" /V2 /DVERSION=${VERSION} launcher.nsi' = 0
 
 !define MUI_ICON "${ICON}"
 !define MUI_UNICON "${ICON}"
@@ -103,18 +107,21 @@ Section "${NAME}" SecMain
   SetOutPath "$INSTDIR\runtime\Lib\site-packages"
   File "unweave.pth"
   SetOutPath "$INSTDIR"
+  File "build\Unweave.exe"
 
-  ; Start Menu entry. Launches via launch.bat (app\launch.bat, copied in by the
-  ; File /r above) rather than runtime\python.exe or pythonw.exe directly: on a real
+  ; Shortcuts start Unweave.exe (launcher.nsi), which runs exactly what app\launch.bat
+  ; runs but with its console hidden. launch.bat is still installed for running by hand
+  ; when the log is needed. Why not runtime\python.exe or pythonw.exe directly: on a real
   ; install, a shortcut launching python.exe straight (a fresh, attached console)
   ; reliably crashed within a second of opening, silently, every time; the exact
   ; same command with stdout/stderr redirected to a file instead — which is exactly
   ; what launch.bat does — opened the app successfully, every time. Root cause not
   ; understood; this is the configuration confirmed working on a real machine.
   ; File /r "..\app\*" copies app/'s CONTENTS into $INSTDIR directly (not into an
-  ; "$INSTDIR\app" subfolder), so launch.bat/ui_entrypoint.py land at $INSTDIR's root.
+  ; "$INSTDIR\app" subfolder), so launch.bat/ui_entrypoint.py land at $INSTDIR's root,
+  ; next to Unweave.exe and runtime\.
   CreateDirectory "$SMPROGRAMS\${NAME}"
-  CreateShortCut "$SMPROGRAMS\${NAME}\${NAME}.lnk" "$INSTDIR\launch.bat" "" "$INSTDIR\icon.ico"
+  CreateShortCut "$SMPROGRAMS\${NAME}\${NAME}.lnk" "$INSTDIR\Unweave.exe" "" "$INSTDIR\icon.ico"
   CreateShortCut "$SMPROGRAMS\${NAME}\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
@@ -132,7 +139,7 @@ Section "${NAME}" SecMain
 SectionEnd
 
 Section "Desktop shortcut" SecDesktop
-  CreateShortCut "$DESKTOP\${NAME}.lnk" "$INSTDIR\launch.bat" "" "$INSTDIR\icon.ico"
+  CreateShortCut "$DESKTOP\${NAME}.lnk" "$INSTDIR\Unweave.exe" "" "$INSTDIR\icon.ico"
 SectionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
@@ -149,6 +156,7 @@ Section "Uninstall"
   Delete "$INSTDIR\icon.ico"
   Delete "$INSTDIR\ui_entrypoint.py"
   Delete "$INSTDIR\launch.bat"
+  Delete "$INSTDIR\Unweave.exe"
   RMDir /r "$INSTDIR\sound_razor"
   RMDir /r "$INSTDIR\__pycache__"
   RMDir /r "$INSTDIR\unweave.egg-info"

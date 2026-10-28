@@ -137,6 +137,17 @@ class WindowControls:
         self._window.resize(max(MIN_WIDTH, width), max(MIN_HEIGHT, height), fix)
 
 
+def app_icon() -> str | None:
+    """The app's own icon for the window and its taskbar button. Without one, pywebview's
+    Windows backend takes python.exe's icon, since python.exe owns the window. The
+    installer puts icon.ico next to this file; a checkout has it in ../assets."""
+    here = Path(__file__).resolve().parent
+    for path in (here / "icon.ico", here.parent / "assets" / "icon.ico"):
+        if path.is_file():
+            return str(path)
+    return None
+
+
 def main():
     host = "127.0.0.1"
     port = 8765
@@ -184,7 +195,7 @@ def main():
         # Lets Chrome DevTools attach to the real window for troubleshooting (distinct
         # from debug=True below, which would also add a right-click "Inspect" menu).
         webview.settings["REMOTE_DEBUGGING_PORT"] = 9223
-        webview.start(debug=False)
+        webview.start(debug=False, icon=app_icon())
     else:
         webbrowser.open(url)
         try:
