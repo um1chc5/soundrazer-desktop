@@ -113,6 +113,18 @@ it with:
 
 If that fails, install the packages and re-run the installer.
 
+**Playback clips for a moment, then goes silent in the native window (known issue).**
+Seen on Ubuntu 24.04 (WebKitGTK 2.4x, PipeWire). The native window plays audio through
+WebKitGTK's Web Audio, which decodes with GStreamer. Its FLAC decoder logs
+`flacdec: Lost sync, flushing decoder` on the 24-bit FLAC stems, and even with the stems
+converted to WAV the output was a ~0.3 s burst followed by silence. The audio device
+itself is fine, and Chrome plays the same project correctly. Not fixed yet; until then,
+use the browser mode:
+
+```bash
+UNWEAVE_BROWSER=1 unweave
+```
+
 **"FFmpeg was not found."**
 Run the app's first-run setup, or install FFmpeg from your distro
 (`sudo apt install ffmpeg`) and reopen the app.
