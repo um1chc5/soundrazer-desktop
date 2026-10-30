@@ -120,16 +120,21 @@ export function describePlan(plan) {
   ];
   const ownCount = own.length + ownLeaves.length;
   const files = ownCount + (members.length ? 1 : 0);
-  // Everything Demucs has to produce: own files, group members, and the guitar
-  // whenever the split needs it as an input.
+  // Everything the plan needs from the separator: own files, group members, and
+  // the guitar whenever the split needs it as an input.
   const computed = new Set([...own, ...members.filter(id => MODEL_STEMS.includes(id))]);
   if (split) computed.add(GUITAR);
+  const model = computed.size > 0 && [...computed].every(id => id === 'vocals')
+    ? 'vocal' : 'six-stem';
   return {
     enabled, split, leaves, own, grouped, ownLeaves, groupedLeaves, members,
     computed: [...computed], ownCount, files,
+    // The six-stem model always produces all six stems in one pass; the plan then
+    // keeps some and discards the rest, so the pass count is what it costs, not
+    // how many files survive.
+    computedCount: model === 'vocal' ? computed.size : MODEL_STEMS.length,
     passes: split ? 2 : 1,
-    model: computed.size > 0 && [...computed].every(id => id === 'vocals')
-      ? 'vocal' : 'six-stem',
+    model,
     silent: files === 0,
   };
 }

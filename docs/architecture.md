@@ -49,10 +49,15 @@ User → CLI/UI → pipeline.separate() → FFmpeg normalize → audio-separator
 ## Models
 | Model | File | Purpose | Backend |
 |---|---|---|---|
-| htdemucs_6s | htdemucs_6s.yaml + 5c90dfd2.th | 6 stems (vocals, drums, bass, guitar, piano, other) | PyTorch (Demucs) |
-| htdemucs | htdemucs.yaml + 955717e8.th | 4 stems (vocals, drums, bass, other) | PyTorch (Demucs) |
+| htdemucs_6s | htdemucs_6s.yaml + 5c90dfd2.th | 6 stems (vocals, drums, bass, guitar, piano, other) — the default for every multi-stem plan | PyTorch (Demucs) |
+| htdemucs | htdemucs.yaml + 955717e8.th | 4 stems (vocals, drums, bass, other) — only via an explicit `--model`, never auto-selected | PyTorch (Demucs) |
 | UVR_MDXNET_KARA_2 | UVR_MDXNET_KARA_2.onnx | 2 stems (vocals + instrumental) | ONNX Runtime |
 | lead_rhythm_listra92 | lead_rhythm_listra92.ckpt | Split guitar into lead + rhythm | PyTorch (RoFormer) |
+
+`select_model()` only falls back to the MDX karaoke model when the plan asks for nothing
+but `vocals`/`instrumental`. Everything else runs htdemucs_6s, so `other` always means the
+same thing, and stems a plan does not keep (or fold into `other.flac`) are simply dropped
+after inference instead of changing which model ran.
 
 ## Frontend (`web/`)
 - `web/js/` — vanilla ES modules, including project management, import, separation controls, and audio playback

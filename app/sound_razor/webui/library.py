@@ -26,8 +26,9 @@ from ..setup_env import (FFMPEG_SIZE_MB, RUNTIME_SIZE_MB, SEPARATION_SIZE_MB, YO
                          ffmpeg_ok, runtime_ok, separation_ok, youtube_ok, run_setup)
 
 CUSTOM_STEMS = ("vocals", "guitar", "bass", "drums", "piano", "other")
-# A plan may also fold in the guitar-split outputs; they are produced mid-run.
-PLAN_GROUP_STEMS = (*CUSTOM_STEMS, "lead", "rhythm")
+# A plan may also name the guitar-split outputs, both as own files and as group
+# members; they are produced mid-run by the split, not by the separation model.
+PLAN_STEMS = (*CUSTOM_STEMS, "lead", "rhythm")
 
 # Staging-directory prefixes left behind by interrupted runs. The startup sweep only
 # removes directories matching these prefixes, never follows symlinks, and never
@@ -46,8 +47,10 @@ def selection_stems(preset, stems=None):
         raise ValueError("Choose vocals/instrumental or custom separation.")
     if not isinstance(stems, list) or not stems:
         raise ValueError("Select at least one instrument.")
-    if any(not isinstance(stem, str) or stem not in CUSTOM_STEMS for stem in stems):
-        raise ValueError("Unknown custom stem.")
+    unknown = [stem for stem in stems
+               if not isinstance(stem, str) or stem not in CUSTOM_STEMS]
+    if unknown:
+        raise ValueError(f"Unknown custom stem: {', '.join(map(str, unknown))}.")
     return list(dict.fromkeys(stems))
 
 
@@ -57,8 +60,10 @@ def validate_group(group):
         return None
     if not isinstance(group, list):
         raise ValueError("Invalid stem plan.")
-    if any(not isinstance(name, str) or name not in PLAN_GROUP_STEMS for name in group):
-        raise ValueError("Unknown stem in the plan.")
+    unknown = [name for name in group
+               if not isinstance(name, str) or name not in PLAN_STEMS]
+    if unknown:
+        raise ValueError(f"Unknown stem in the plan: {', '.join(map(str, unknown))}.")
     return list(dict.fromkeys(group))
 
 
@@ -69,8 +74,11 @@ def plan_stems(preset, stems, group=None):
         return selection_stems(preset, stems)
     if not isinstance(stems, list):
         raise ValueError("Invalid stem plan.")
-    if any(not isinstance(stem, str) or stem not in CUSTOM_STEMS for stem in stems):
-        raise ValueError("Unknown custom stem.")
+    # `lead`/`rhythm` are legal own files: they arrive from the guitar split.
+    unknown = [stem for stem in stems
+               if not isinstance(stem, str) or stem not in PLAN_STEMS]
+    if unknown:
+        raise ValueError(f"Unknown stem in the plan: {', '.join(map(str, unknown))}.")
     chosen = list(dict.fromkeys(stems))
     if not chosen and not group:
         raise ValueError("Select at least one instrument.")

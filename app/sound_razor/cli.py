@@ -5,8 +5,13 @@ import json
 import sys
 from pathlib import Path
 
-from .audio.pipeline import DEFAULT_MODEL, STEM_CHOICES, separate, train
+from .audio.pipeline import DEFAULT_MODEL, LEAF_STEMS, STEM_CHOICES, separate, train
 from .audio.exports import FORMATS
+
+# `--stems`/`--group` also accept the guitar-split leaves, which the separation
+# model never produces; argparse choices must therefore include them or a plan
+# that splits the guitar is rejected before the pipeline ever sees it.
+PLAN_CHOICES = (*STEM_CHOICES, *LEAF_STEMS)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -19,9 +24,9 @@ def parser() -> argparse.ArgumentParser:
     split.add_argument("--output", "--output-folder", type=Path,
                        help="Destination folder (created if needed). Default: input folder/filename without extension; YouTube: stems/track-<id>.")
     split.add_argument("--model", help=f"Override automatic model selection (default: {DEFAULT_MODEL})")
-    split.add_argument("--stems", nargs="*", choices=STEM_CHOICES,
-                       help="Stems that get their own file. Pass it empty for a plan with no own files.")
-    split.add_argument("--group", nargs="+", choices=STEM_CHOICES,
+    split.add_argument("--stems", nargs="*", choices=PLAN_CHOICES,
+                       help="Stems that get their own file (lead/rhythm need --split-guitar). Pass it empty for a plan with no own files.")
+    split.add_argument("--group", nargs="+", choices=PLAN_CHOICES,
                        help="Stems folded into other.flac; they are mixed in and not written on their own.")
     split.add_argument("--split-guitar", action="store_true",
                        help="Split the guitar stem into lead and rhythm after separation.")

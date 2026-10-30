@@ -63,12 +63,14 @@ def select_model(model: str | None, stems: list[str] | None) -> tuple[str, tuple
         if not requested or set(requested) - set(STEM_CHOICES):
             raise ValueError("Choose stems from: " + ", ".join(STEM_CHOICES))
     if model is None:
-        if requested is None or set(requested) & {"guitar", "piano"}:
-            model = DEFAULT_MODEL
-        elif set(requested) <= {"vocals", "instrumental"}:
-            model = VOCAL_MODEL
-        else:
-            model = "htdemucs.yaml"
+        # One 6-stem model for every multi-stem plan. The 4-stem fallback used to
+        # swallow guitar and piano *inside* `other`, so identical ticks produced
+        # different audio depending on which stems happened to be picked next to
+        # them. 6-stem is a superset, so a plan can always fold what it does not
+        # keep and discard the rest after inference.
+        # The karaoke pair is the one exception: `instrumental` only exists in MDX.
+        karaoke = set(MODEL_STEMS[VOCAL_MODEL])
+        model = VOCAL_MODEL if requested is not None and set(requested) <= karaoke else DEFAULT_MODEL
     supported = MODEL_STEMS.get(model)
     if requested is not None:
         if supported is None:
@@ -264,30 +266,37 @@ def _build_other(by_stem: dict[str, Path], grouped) -> Path | None:
     return destination
 
 
-def _collect(by_stem: dict[str, Path], names, other: Path | None) -> list[Path]:
+def _collect(by_stem: dict[str, Path], names, other: Path | None, folded=()) -> list[Path]:
     missing = [name for name in names if name not in by_stem]
     if missing:
         raise RuntimeError("Model did not produce requested stems: " + ", ".join(sorted(missing)))
     paths = [by_stem[name] for name in names]
     if other is not None and other not in paths:
         paths.append(other)
+    # The model computes every stem it can; whatever the plan neither keeps nor
+    # folds into other.flac is dropped here and never reaches the project folder.
+    kept = {path.stem for path in paths} | set(folded)
+    dropped = sorted(name for name in by_stem if name not in kept)
+    if dropped:
+        print("Dropping unrequested stems: " + ", ".join(dropped), file=sys.stderr, flush=True)
     return paths
 
 
 def resolve_plan(model: str | None, own, grouped, split_guitar: bool):
     """Choose the model and expand the flags into `(model, own, grouped)`.
 
-    `other` is the group's destination, so it is folded in whenever the model has
-    one — the same rule the dialog enforces. `--group` without `--stems` keeps
-    everything that is not folded."""
+    An explicit `group` is honoured exactly: `other.flac` is the mix of what it
+    lists, so an empty group writes no `other.flac` at all. Only `--group` without
+    `--stems` ("keep everything that is not folded") needs `other` added to the
+    group, because there `other` is the destination rather than one more member."""
     model = select_model(model, model_request(own, grouped, split_guitar))[0]
     grouped = legacy_group(model, own, grouped)
     if grouped is None:
         return model, own, grouped
     produced = MODEL_STEMS.get(model, ())
-    if "other" in produced and "other" not in grouped:
-        grouped = (*grouped, "other")
     if own is None:
+        if "other" in produced and "other" not in grouped:
+            grouped = (*grouped, "other")
         own = tuple(name for name in produced if name not in grouped)
     return model, own, grouped
 
@@ -334,7 +343,7 @@ def separate(source: str, output: Path | None = None, model: str | None = None,
                 by_stem.update(_run_guitar_split(by_stem, stage, cache))
                 split_settings = _read_settings(stage / settings.name)
             other = _build_other(by_stem, grouped)
-            paths = _collect(by_stem, names, other)
+            paths = _collect(by_stem, names, other, grouped or ())
             destinations = [output / path.name for path in paths]
             validate_outputs(original, destinations + [settings])
             settings_value = {**split_settings, "stems": list(names), "group": list(grouped or ())}

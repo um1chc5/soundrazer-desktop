@@ -18,7 +18,9 @@ const M = {
   groupPad: 3,
   groupBorder: 2,
   groupEmpty: 27,
-  colGap: 16,
+  // Room for the curve to land. A 16px gap left the S-bend no horizontal
+  // travel, so the wire read as a cramped vertical squiggle.
+  colGap: 38,
   rowGap: 14,
   actGap: 8,
   flowStagger: 0.19,
@@ -201,7 +203,7 @@ const place = (node, geometry) => {
 
 function renderRoot(spec) {
   return el('div', 'plan-node plan-root',
-    `<i class="plan-h out"></i><span class="plan-dot"></span>
+    `<span class="plan-dot"></span>
      <span class="plan-name">${spec.label}</span>`);
 }
 
@@ -213,8 +215,7 @@ function renderStem(spec, plan, commit) {
     ? `<span class="plan-flag other">${t(auto ? 'plan.badgeAuto' : 'plan.badgeGrouped')}</span>`
     : state === 'off' ? `<span class="plan-flag off">${t('plan.badgeDisabled')}</span>` : '';
   const node = el('button', 'plan-node plan-stem',
-    `<i class="plan-h in"></i><i class="plan-h out"></i>
-     <span class="plan-dot"></span><span class="plan-name">${spec.label}</span>${flag}`);
+    `<span class="plan-dot"></span><span class="plan-name">${spec.label}</span>${flag}`);
   node.type = 'button';
   node.dataset.state = state;
   node.setAttribute('aria-pressed', String(plan.enabled.has(spec.id)));
@@ -231,8 +232,7 @@ function renderLeaf(spec, plan) {
   const grouped = plan.grouped.has(spec.id);
   // A leaf is the product of the split, not an input: it is never clickable.
   const node = el('div', 'plan-node plan-leaf',
-    `<i class="plan-h in"></i><i class="plan-h out"></i>
-     <span class="plan-dot"></span><span class="plan-name">${spec.label}</span>
+    `<span class="plan-dot"></span><span class="plan-name">${spec.label}</span>
      ${grouped ? '' : `<span class="plan-sub">${spec.sub}</span>`}
      ${grouped ? `<span class="plan-flag other">${t('plan.badgeGrouped')}</span>` : ''}`);
   node.dataset.state = grouped ? 'grouped' : 'on';
@@ -261,7 +261,6 @@ function groupRow(id) {
 
 function renderGroup(spec, plan, commit) {
   const node = el('div', 'plan-node plan-group');
-  node.append(el('i', 'plan-h in'));
   const head = el('div', 'plan-group-head',
     `<span class="plan-dot"></span>${t('plan.otherFile')}
      <span class="plan-count">${spec.members.length}</span>`);
@@ -279,8 +278,7 @@ function renderAction(spec, plan, commit) {
   if (spec.action === 'split') return renderSplit(spec, plan, commit);
   const merged = plan.grouped.has(spec.target);
   const node = el('button', `plan-node plan-act${merged ? ' is-on' : ''}`,
-    `<i class="plan-h in"></i><i class="plan-h out"></i>
-     <span class="plan-name">${t(merged ? 'plan.unmergeShort' : 'plan.mergeShort')}</span>`);
+    `<span class="plan-name">${t(merged ? 'plan.unmergeShort' : 'plan.mergeShort')}</span>`);
   node.type = 'button';
   node.setAttribute('aria-pressed', String(merged));
   node.setAttribute('aria-label', t(merged ? 'plan.unmerge' : 'plan.merge', {stem: label(spec.target)}));
@@ -293,8 +291,7 @@ function renderSplit(spec, plan, commit) {
   // The label stays "Split" whether it is on or off: colour and aria-pressed
   // carry the state, and a changing label would not fit the column.
   const node = el('button', `plan-node plan-act plan-split${on ? ' is-on' : ''}`,
-    `<i class="plan-h in"></i><i class="plan-h out"></i>
-     <span class="plan-name">${t('plan.split')}</span>
+    `<span class="plan-name">${t('plan.split')}</span>
      <span class="plan-key">2×</span>`);
   node.type = 'button';
   node.setAttribute('aria-pressed', String(on));
@@ -325,7 +322,10 @@ function renderNodes(graph, plan, commit) {
 function curve(from, to) {
   const x1 = from.x + from.w;
   const x2 = to.x;
-  const bend = Math.max(16, (x2 - x1) * 0.55);
+  // Half the gap each, so both control points meet in the middle and the wire
+  // leaves and enters horizontally. Not a fraction > 0.5: that pushes the first
+  // control point past the second, and the line bulges backwards in an S-kink.
+  const bend = Math.max(0, x2 - x1) / 2;
   return `M${x1} ${from.cy} C${x1 + bend} ${from.cy}, ${x2 - bend} ${to.cy}, ${x2} ${to.cy}`;
 }
 
@@ -445,7 +445,7 @@ function renderWires(graph, plan) {
 const STEP_HTML = {
   separate: (step, described) => t(step.model === 'vocal'
     ? 'plan.stepSeparateVocal' : 'plan.stepSeparate', {
-    stems: described.computed.length,
+    stems: described.computedCount,
   }),
   split: step => t(step.skipped ? 'plan.stepSplitSkipped' : 'plan.stepSplit'),
   mix: (step, described) => {

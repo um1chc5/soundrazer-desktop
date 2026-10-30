@@ -4,7 +4,11 @@
 
 /* ---- dialog shell ---- */
 .plan-dialog {
-  display: flex;
+  /* Deliberately no `display` here: the UA hides a closed <dialog> with `display:
+     none`, and any author `display` would beat it — which left the whole plan
+     painted on the page before it was ever opened, and under the fixed title bar
+     because a non-modal dialog is not in the top layer. The flex layout lives on
+     [open] below instead. */
   flex-direction: column;
   width: min(1120px, calc(100vw - 48px));
   height: min(90vh, 920px);
@@ -16,6 +20,10 @@
   box-shadow: var(--shadow);
   overflow: hidden;
 }
+
+/* The flex layout only once the dialog is actually open (a modal <dialog> is also
+   promoted to the top layer, so it paints above the fixed title bar — no z-index). */
+.plan-dialog[open] { display: flex; }
 
 /* The shared `dialog::backdrop` supplies the dim; only add the blur here. */
 .plan-dialog::backdrop {
@@ -141,17 +149,9 @@
   box-shadow: 0 0 8px color-mix(in srgb, var(--c, transparent) 55%, transparent);
 }
 
-/* connection handles, drawn as the tiny stub that meets the wire */
-.plan-h {
-  position: absolute;
-  top: 50%;
-  width: 7px;
-  height: 1px;
-  background: var(--line-strong);
-}
-
-.plan-h.in { left: -8px; }
-.plan-h.out { right: -8px; }
+/* Connection handles are gone: the wire now starts and ends exactly on the node
+   border, so a separate 1px stub only ever read as a broken, misaligned segment
+   (it also used a fixed colour, so it stayed bright on dimmed/off nodes). */
 
 .plan-root {
   --c: var(--accent);
