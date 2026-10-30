@@ -479,8 +479,10 @@ function renderRuns(plan) {
   passPill.className = `pill${described.passes > 1 ? ' warn' : ''}`;
   document.getElementById('plan-file-pill').textContent =
     t('plan.files', {count: described.files});
+  // Stem pass ~1x, guitar split ~10x, mixing <1 s: the split dominates the run, so a
+  // plan that enables it costs roughly eleven times a plain separation.
   document.getElementById('plan-run-total').textContent = t('plan.estimate', {
-    factor: described.model === 'vocal' ? '0.5' : described.split ? '1.3' : '1',
+    factor: described.split ? '11' : '1',
   });
   document.getElementById('plan-foot-hint').textContent = t('plan.footHint', {
     own: described.ownCount, grouped: described.members.length,

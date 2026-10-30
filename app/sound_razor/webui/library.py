@@ -91,9 +91,15 @@ GUITAR_PROGRESS = re.compile(r"^Guitar split (\d{1,3})%")
 # (marker printed by the CLI, phase, overall progress when the phase starts)
 PHASE_MARKERS = (("Preparing audio", "prepare", 2), ("Loading model", "load", 6),
                  ("Downloading ", "download", 6), ("Separating with", "separate", 12),
-                 ("Splitting guitar", "separate", 12), ("Writing stems", "finalize", 96),
+                 ("Splitting guitar", "guitar", 12), ("Writing stems", "finalize", 96),
                  ("Exporting stems", "export", 2), ("Exported ", "finalize", 96))
 SEPARATE_RANGE = (12, 95)
+# A separation that also splits the guitar runs two inference passes inside the one
+# job: Demucs, then the RoFormer lead/rhythm split. The second pass gets its own phase
+# so the UI can label it and colour it separately, and its own slice of the bar so it
+# can never look frozen at the first pass's ceiling.
+DEMUCS_RANGE = (12, 70)
+GUITAR_RANGE = (70, 95)
 YTDLP_PROGRESS = re.compile(r"\[download\]\s+([\d.]+)%(?:.*ETA\s+([\d:]+))?")
 
 
@@ -109,6 +115,70 @@ def clock_seconds(text: str):
 
 
 APP_VERSION = app_version()
+# How many per-job log files to keep on disk. Logs are small text files, but a
+# long-lived install can run thousands of jobs, so keep only the recent ones.
+JOB_LOG_KEEP = 40
+
+
+class JobLog:
+    """A per-job transcript on disk, so a run can be diagnosed after the fact.
+
+    The UI's in-memory log is trimmed to 160 lines, drops the progress lines that
+    drive the bar, and dies with the server process (a cancelled or crashed job
+    leaves nothing behind). This file keeps every raw CLI line plus the command
+    that produced it.
+    """
+
+    def __init__(self, directory: Path, job: dict, command):
+        self.path = None
+        self.handle = None
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+            stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(job.get("started") or time.time()))
+            safe = re.sub(r"[^\w.-]+", "-", f"{stamp}-{job['kind']}-{job['id']}").strip("-")
+            self.path = directory / f"{safe}.log"
+            self.handle = self.path.open("w", encoding="utf-8", errors="replace", buffering=1)
+            self.write(f"# job      {job['id']} ({job['kind']})")
+            if job.get("project"):
+                self.write(f"# project  {job['project']}")
+            self.write(f"# started  {stamp}  app {APP_VERSION}")
+            self.write("# command  " + " ".join(str(part) for part in command))
+            self.write("")
+            job["log"] = str(self.path)
+        except OSError:
+            self.handle = None
+
+    def write(self, line: str):
+        if self.handle is None:
+            return
+        try:
+            stamp = time.strftime("%H:%M:%S")
+            self.handle.write(f"{stamp} {line}\n")
+        except OSError:
+            self.handle = None
+
+    def close(self, status: str, error=None):
+        if self.handle is None:
+            return
+        try:
+            self.write("")
+            self.write(f"# status   {status}" + (f": {error}" if error else ""))
+            self.handle.close()
+        except OSError:
+            pass
+        finally:
+            self.handle = None
+
+
+def prune_job_logs(directory: Path, keep: int = JOB_LOG_KEEP):
+    """Delete all but the newest `keep` job logs. Never raises."""
+    try:
+        logs = sorted(directory.glob("*.log"), key=lambda path: path.stat().st_mtime, reverse=True)
+        for stale in logs[keep:]:
+            stale.unlink(missing_ok=True)
+    except OSError:
+        pass
+
 
 
 def public_job(job: dict) -> dict:
@@ -139,6 +209,9 @@ class Library:
         self.active_jobs = {}        # job_id -> job record for active jobs
         self.processes = {}          # job_id -> subprocess.Popen
         self.job_logs = {}           # job_id -> deque(maxlen=160)
+        # Per-job transcripts on disk (see JobLog). Kept next to the config file so
+        # dev runs and installs both leave a trail; overridable for tests.
+        self.log_dir = Path(os.environ.get("SOUND_RAZOR_LOG_DIR") or self.config.parent / "logs")
         self.finished_jobs = deque(maxlen=20)  # recent finished records, for UI notices
         self._drainer = None         # coordinator thread that starts workers up to cap
         self._job_done = threading.Event()  # set when any active job finishes
@@ -300,27 +373,65 @@ class Library:
             if line.startswith(marker):
                 job["phase"] = phase
                 job["progress"] = max(job["progress"], floor)
-                if phase == "separate":
+                # Every step owns its own 0-100: the dialog's ring restarts for the
+                # guitar pass instead of counting one global bar, so a long second
+                # pass is visibly its own stage rather than a stalled first one.
+                # Only stages that report real sub-progress reset the ring; prepare/
+                # load/save keep the finished value so it never jumps back to 0.
+                if phase in {"separate", "guitar", "download", "export"}:
+                    job["step_progress"] = 0
+                if phase == "guitar":
+                    # A split-only job has no Demucs pass in front of it, so its bar
+                    # starts from the same low floor instead of jumping to 70.
+                    job["progress"] = max(job["progress"], self._guitar_range(job)[0])
+                if phase in {"separate", "guitar"}:
                     job["phase_started"] = time.time()
                 if phase in {"finalize", "download"}:
                     job["eta"] = None
                 return False
         bar = TQDM.search(line)
-        step = bar or GUITAR_PROGRESS.match(line)
+        guitar = GUITAR_PROGRESS.match(line)
+        step = bar or guitar
         if not step:
             return False
-        if job["phase"] == "separate":
-            low, high = SEPARATE_RANGE
+        if job["phase"] in {"separate", "guitar"}:
+            low, high = self._guitar_range(job) if job["phase"] == "guitar" and guitar \
+                else self._separate_slice(job, bool(guitar))
+            # Time the ETA extrapolation from the start of *this* pass. Measuring from
+            # the start of the phase made the guitar pass inherit the whole Demucs run:
+            # at 15% of the split it reported that Demucs' minutes had to be repeated
+            # for the remaining 85%, so TIME LEFT swelled to ~12 minutes.
+            sample = "guitar" if guitar else "demucs"
+            if job.get("sample") != sample:
+                job["sample"] = sample
+                job["sample_started"] = time.time()
             percent = min(100, int(step.group(1)))
+            job["step_progress"] = max(job.get("step_progress") or 0, percent)
             job["progress"] = max(job["progress"], low + (high - low) * percent / 100)
             remaining = clock_seconds(bar.group(3)) if bar else None
             if remaining is None and percent:
-                spent = time.time() - job.get("phase_started", job["started"])
+                spent = time.time() - job.get("sample_started", job["started"])
                 remaining = spent * (100 - percent) / percent
             if remaining is not None:
                 job["eta"] = remaining + 3  # writing stems afterwards takes a few seconds
                 job["eta_at"] = time.time()
         return True
+
+    @staticmethod
+    def _guitar_range(job: dict):
+        """The slice of the bar the lead/rhythm split owns. It only has a slice of its
+        own when a Demucs pass runs first; a split-only job owns the whole bar."""
+        if job.get("split_leaves"):
+            return GUITAR_RANGE
+        return SEPARATE_RANGE
+
+    @staticmethod
+    def _separate_slice(job: dict, guitar: bool):
+        """Which part of the bar the Demucs pass owns. A separation that also splits
+        the guitar shares the phase with it; everything else uses the whole range."""
+        if job.get("split_leaves"):
+            return DEMUCS_RANGE
+        return SEPARATE_RANGE
 
     # ------------------------------------------------------------------ enqueue
 
@@ -399,6 +510,7 @@ class Library:
         job["finished"] = time.time()
         self.processes.pop(job["id"], None)
         self.finished_jobs.append(job)
+        prune_job_logs(self.log_dir)
         # Point the UI's single-job shim at the finished job unless another is still running,
         # so its success/failure notice still surfaces.
         others = [other for other in self._active_jobs() if other is not job]
@@ -490,7 +602,7 @@ class Library:
                "preset": preset, "stems": chosen, "group": chosen_group or [],
                "guitar_split": guitar_split, "split_leaves": bool(split_leaves),
                "trim": {"start": saved_trim[0], "end": saved_trim[1]} if saved_trim else None,
-               "phase": "prepare", "progress": 0, "eta": None,
+               "phase": "prepare", "progress": 0, "step_progress": 0, "eta": None,
                "_project": project, "_original": info["original"],
                "_stems": chosen, "_group": chosen_group,
                "_split_leaves": bool(split_leaves), "_trim": saved_trim}
@@ -536,7 +648,7 @@ class Library:
                 raise ValueError("Nothing to set up.")
             job = {"id": uuid.uuid4().hex, "kind": "setup", "project": None,
                    "status": "queued", "started": time.time(), "finished": None, "error": None,
-                   "phase": "prepare", "progress": 0, "eta": None,
+                   "phase": "prepare", "progress": 0, "step_progress": 0, "eta": None,
                    "stages": stages, "stage": None,
                    "_stages": stages}
             return self._enqueue(job)
@@ -560,23 +672,31 @@ class Library:
             with tempfile.TemporaryDirectory(prefix='.youtube-', dir=root) as temporary:
                 work = Path(temporary)
                 with self.lock:
-                    process = self._launch(job, youtube_command(url, work), stdout=subprocess.PIPE,
+                    command = youtube_command(url, work)
+                    process = self._launch(job, command, stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace',
                         env=dict(os.environ, PYTHONUNBUFFERED='1', PYTHONIOENCODING='utf-8'), start_new_session=True)
                     if process is None:
                         return
-                for line in process.stdout:
-                    line = line.strip()
-                    with self.lock:
-                        download = YTDLP_PROGRESS.search(line)
-                        if download:
-                            job['progress'] = max(job['progress'], float(download.group(1)))
-                            job['eta'] = clock_seconds(download.group(2)) if download.group(2) else None
-                            job['eta_at'] = time.time()
-                        elif line:
-                            self._job_logs(job_id).append(line[-2000:])
-                code = process.wait()
-                process.stdout.close()
+                transcript = JobLog(self.log_dir, job, command)
+                try:
+                    for line in process.stdout:
+                        line = line.strip()
+                        transcript.write(line)
+                        with self.lock:
+                            download = YTDLP_PROGRESS.search(line)
+                            if download:
+                                job['progress'] = max(job['progress'], float(download.group(1)))
+                                job['step_progress'] = max(job.get('step_progress') or 0,
+                                                            float(download.group(1)))
+                                job['eta'] = clock_seconds(download.group(2)) if download.group(2) else None
+                                job['eta_at'] = time.time()
+                            elif line:
+                                self._job_logs(job_id).append(line[-2000:])
+                    code = process.wait()
+                finally:
+                    transcript.close(job['status'], job.get('error'))
+                    process.stdout.close()
                 with self.lock:
                     if job['status'] == 'cancelling':
                         return
@@ -616,13 +736,18 @@ class Library:
                     if process is None:
                         return
                 job_logs = self._job_logs(job_id)
-                for line in process.stdout:
-                    line = line.strip()
-                    with self.lock:
-                        if line and not self._track_progress(job, line):
-                            job_logs.append(line[-2000:])
-                code = process.wait()
-                process.stdout.close()
+                transcript = JobLog(self.log_dir, job, command)
+                try:
+                    for line in process.stdout:
+                        line = line.strip()
+                        transcript.write(line)
+                        with self.lock:
+                            if line and not self._track_progress(job, line):
+                                job_logs.append(line[-2000:])
+                    code = process.wait()
+                finally:
+                    transcript.close(job["status"], job.get("error"))
+                    process.stdout.close()
                 with self.lock:
                     if job["status"] == "cancelling":
                         return
@@ -643,7 +768,7 @@ class Library:
                         if backup.exists():
                             backup.rename(destination)
                         raise
-                    job.update(status="succeeded", progress=100, phase="done", eta=0)
+                    job.update(status="succeeded", progress=100, step_progress=100, phase="done", eta=0)
         except Exception as error:
             with self.lock:
                 if job["status"] != "cancelling":
@@ -716,7 +841,7 @@ class Library:
                    "status": "queued", "started": time.time(), "finished": None, "error": None,
                    "formats": chosen_formats, "stems": chosen_stems,
                    "prevent_clipping": bool(prevent_clipping),
-                   "phase": "prepare", "progress": 0, "eta": None,
+                   "phase": "prepare", "progress": 0, "step_progress": 0, "eta": None,
                    "_project": project, "_formats": chosen_formats, "_stems": chosen_stems,
                    "_prevent_clipping": bool(prevent_clipping)}
             return self._enqueue(job)
@@ -731,6 +856,8 @@ class Library:
                     fraction = completed / total if total else 0
                     job["phase"] = "finalize" if completed >= total else "export"
                     job["progress"] = max(2, min(96, 2 + fraction * 93))
+                    # The ring is per step: this report is the export step's own 0-100.
+                    job["step_progress"] = max(job.get("step_progress") or 0, round(fraction * 100))
                     if fraction > 0.02:
                         job["eta"] = (time.time() - job["started"]) / fraction + 1
                         job["eta_at"] = time.time()
@@ -747,7 +874,7 @@ class Library:
             export_stems(project, stems, formats, prevent_clipping, report, set_process)
             with self.lock:
                 if job["status"] != "cancelling":
-                    job.update(status="succeeded", progress=100, phase="done", eta=0)
+                    job.update(status="succeeded", progress=100, step_progress=100, phase="done", eta=0)
         except Exception as error:
             with self.lock:
                 if job["status"] != "cancelling":

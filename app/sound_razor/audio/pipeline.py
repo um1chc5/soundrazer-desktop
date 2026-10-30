@@ -236,7 +236,6 @@ def _run_demucs(model: str, normalized: Path, stage: Path, cache: Path) -> dict[
         names = {stem: stem for stem in MODEL_STEMS.get(model, ())}
         results = separator.separate(str(normalized), custom_output_names=names or None)
         del separator
-    print("Writing stems", file=sys.stderr, flush=True)
     paths = [stage / Path(name).name for name in results]
     if len(paths) < 2 or any(not path.is_file() or path.stat().st_size <= 44 for path in paths):
         raise RuntimeError("Separator did not produce valid stem files.")
@@ -342,6 +341,11 @@ def separate(source: str, output: Path | None = None, model: str | None = None,
             if split_guitar:
                 by_stem.update(_run_guitar_split(by_stem, stage, cache))
                 split_settings = _read_settings(stage / settings.name)
+            # Printed only once every inference pass is done: the guitar split is a
+            # second pass that can run for minutes, and this marker is what the UI
+            # treats as "nearly finished". Announcing it before the split left the
+            # progress bar pinned near 96% for the whole second pass.
+            print("Writing stems", file=sys.stderr, flush=True)
             other = _build_other(by_stem, grouped)
             paths = _collect(by_stem, names, other, grouped or ())
             destinations = [output / path.name for path in paths]

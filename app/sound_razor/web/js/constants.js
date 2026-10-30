@@ -13,6 +13,10 @@ export const PLAN_META = Object.fromEntries(
 export const DEFAULT_STEMS = ['vocals', 'drums', 'bass', 'guitar'];
 export const AUDIO_EXTENSIONS = ['.wav', '.flac', '.mp3', '.opus', '.ogg', '.m4a', '.aac', '.aiff', '.aif'];
 export const SEPARATION_STEPS = [['prepare', 'step.separation.prepare'], ['load', 'step.separation.load'], ['separate', 'step.separation.separate'], ['finalize', 'step.separation.finalize']];
+// A separation that also splits the guitar runs a second, much slower model after the
+// stem model. Show it as its own step instead of hiding it inside "Separate stems",
+// or the dialog sits on one step for minutes and reads as stuck.
+export const SEPARATION_SPLIT_STEPS = [['prepare', 'step.separation.prepare'], ['load', 'step.separation.load'], ['separate', 'step.separation.separate'], ['guitar', 'step.separation.guitar'], ['finalize', 'step.separation.finalize']];
 export const GUITAR_STEPS = [['prepare', 'step.guitar.prepare'], ['separate', 'step.guitar.separate'], ['finalize', 'step.guitar.finalize']];
 export const YOUTUBE_STEPS = [['download', 'step.youtube.download'], ['finalize', 'step.youtube.finalize']];
 export const EXPORT_STEPS = [['prepare', 'step.export.prepare'], ['export', 'step.export.export'], ['finalize', 'step.export.finalize']];

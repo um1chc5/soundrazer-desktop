@@ -2,10 +2,10 @@
 
 ## Core
 
-- [overview.md](overview.md) — What Sound Razor is, project structure, two layers
-- [architecture.md](architecture.md) — Core architecture, module responsibilities, data flow
+- [overview.md](overview.md) — What Unweave is, project structure, the two layers
+- [architecture.md](architecture.md) — Data flow diagram, design rules, module responsibilities, models
 - [tech-stack.md](tech-stack.md) — Technologies used and alternatives considered
-- [desktop-app.md](desktop-app.md) — Desktop packaging plan (Inno Setup + pywebview)
+- [desktop-app.md](desktop-app.md) — Packaging: NSIS installer, embedded runtime, pywebview, Linux install
 - [linux-install.md](linux-install.md) — Linux install guide, launcher, uninstall, troubleshooting
 
 ## Specs
@@ -18,7 +18,12 @@
   - [05 — Job queue and concurrency](specs/05-job-queue.md)
   - [06 — Close behavior](specs/06-close-behavior.md)
   - [07 — Disk usage and cache](specs/07-disk-usage.md)
+  - [08 — Performance and hidden optimizations](specs/08-performance.md)
 
 ## Handoff
 
 - [known-issues-handoff.md](known-issues-handoff.md) — Installer and first-run bugs for a fresh session
+
+Upstream: Unweave is based on [Sound Razor](https://github.com/pedromtcosta/sound-razor) by
+pedromtcosta. The Python package (`sound_razor`) and the model cache (`.sound-razor/`)
+keep the upstream name on purpose, so existing installs keep working.

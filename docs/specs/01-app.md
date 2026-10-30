@@ -101,7 +101,7 @@ web/
   css/              # component/view stylesheets
 ```
 
-The Python package migration to this layout is complete. Web JavaScript and CSS have been refactored to ES modules under `web/js/` and five stylesheets under `web/css/`.
+The Python package migration to this layout is complete. Web JavaScript and CSS have been refactored to ES modules under `web/js/` and six stylesheets under `web/css/`.
 
 ## Security and operations
 

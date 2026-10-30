@@ -1,60 +1,94 @@
-# Desktop App — Technical Plan (`aloso/unweave`)
+# Desktop App — Packaging (`um1chc5/unweave`)
 
 ## Goal
-Package Sound Razor into a standalone Windows `.exe` installer so non-technical users can install and run it without touching Python, venv, or PATH.
 
-## Three pieces
+Ship Unweave as an installable desktop app so non-technical users can run it without
+touching Python, a venv, or PATH. The installer stays small: heavy dependencies are
+fetched by the app itself, with the user's consent, on first launch.
 
-### 1. Bootstrap installer (Inno Setup, ~5-10 MB)
-A tiny installer that does NOT bundle the heavy deps. Instead it:
-- Installs Python 3.11 (if missing) via embedded Python embeddable package
-- Installs `uv` and the sound-razor package with all extras (`separation`, `guitars`, `youtube`)
-- Installs FFmpeg (bundled or downloaded)
-- Creates Start Menu + Desktop shortcuts
-- On first launch, downloads model weights (~424 MB) automatically
+## Pieces
 
-User experience: double-click `SoundRazor-Setup.exe`, click Next a few times, wait a few minutes, done.
+### 1. Windows installer (`installer/Unweave.nsis`, NSIS)
 
-### 2. Native desktop window (pywebview)
-Wrap the existing web UI in the OS's built-in WebView (EdgeHTML on Windows). Reuses 100% of the existing frontend with minimal changes:
-- The launcher opens the local UI served by `app/sound_razor/webui/server.py` in a native window instead of `webbrowser.open()`
-- No Electron/Chromium bundle (saves ~150 MB)
-- Feels like a real app: taskbar icon, window controls, no browser chrome
+Built with NSIS, not Inno Setup. It deliberately does **no** network access: it copies the
+app, a prebuilt embedded Python runtime, writes shortcuts and an uninstaller.
 
-**Why not Tauri?** Tauri would require rewriting the backend in Rust and installing the Rust toolchain — a much bigger lift for an existing Python codebase. pywebview reuses the existing web UI with minimal changes.
+- Ships embeddable Python 3.11.9 (`installer/embedded/runtime/`, prebuilt with pip and
+  pywebview). `unweave.pth` puts the package on its path.
+- Runs `makensis launcher.nsi` first, producing `Unweave.exe` — the console-less launcher
+  that starts `ui_entrypoint.py` and keeps a log at `%LOCALAPPDATA%\Unweave\launch.log`.
+- Output: `dist/Unweave-Setup-x64.exe`.
+- Start Menu and Desktop shortcuts, plus a proper uninstaller with registry entries.
 
-### 3. Size reduction
-| Technique | Savings |
-|---|---|
-| Don't bundle torch/onnxruntime in installer | ~500 MB → installer is ~5 MB |
-| Download deps at install time | Only pay for what user runs |
-| Strip debug symbols from PyInstaller build | ~10-20% |
-| UPX-compress the bootstrap exe | ~30% on the small installer |
-| Lazy-load model weights (already done) | ~424 MB not in installer |
+Build:
 
-## Files to create
-- `installer/SoundRazor.iss` — Inno Setup script
-- `installer/bootstrap.ps1` — download + install logic
-- `app/sound_razor/webui/server.py` — local HTTP/static server used by the pywebview launcher
-- `app/sound_razor/setup_env.py` — first-run dependency setup jobs
-- `app/sound_razor/web/js/` and `app/sound_razor/web/css/` — static ES-module frontend and stylesheets
-
-## Deliverable
-`SoundRazor-Setup-x64.exe` — a ~5-10 MB bootstrap installer.
-First launch downloads ~500 MB of Python deps + FFmpeg + models in the background.
-Total disk usage after install: ~600 MB (deps + models + app).
-
-## Build flow (developer)
 ```sh
-# 1. (Optional) Build a frozen single-file exe with PyInstaller for faster first launch
-pyinstaller --onefile --windowed app/ui_entrypoint.py
-
-# 2. Compile the Inno Setup bootstrap installer
-iscc SoundRazor.iss
+cd installer
+makensis Unweave.nsis
 ```
 
+Why no heavy deps inside: bundling PyTorch/audio-separator would push the download to
+~2 GB. Beyond size, it lets a user pick only what they need (for example skipping YouTube
+support).
+
+### 2. First-run setup (inside the app)
+
+`app/sound_razor/setup_env.py` detects what is missing and installs it on request, behind
+an explicit consent screen:
+
+- `runtime_ok()`, `ffmpeg_ok()`, `separation_ok()`, `youtube_ok()` probe each stage.
+- `STAGE_ORDER` is `ffmpeg`, `separation`, `youtube`; stage progress is reported on the
+  shared job band (0-90 across missing stages, last 10 for verification).
+- Models (~425 MB) download lazily on first separation, not during setup.
+
+### 3. Native window (pywebview)
+
+The launcher opens the local UI in the OS WebView instead of a browser tab:
+
+- No Electron/Chromium bundle (saves roughly 150 MB and an entire update channel).
+- Real app behaviour: taskbar entry, window controls, no browser chrome.
+- The custom title bar's window buttons reach the window over `/api/window/*`, not the
+  pywebview JS bridge, which proved unreliable in practice.
+
+**Why not Tauri?** It would mean rewriting the backend in Rust. pywebview reuses the
+existing web UI and Python server unchanged.
+
+### 4. Linux (`installer/install-linux.sh`)
+
+The Linux counterpart to `bootstrap.ps1` + `Unweave.nsis`. There is no portable embedded
+interpreter for Linux, so the script builds a venv with `uv`, installs the app, and writes
+a launcher plus a `.desktop` entry.
+
+```sh
+./install-linux.sh                 # install to ~/.local/share/unweave
+./install-linux.sh --prefix DIR    # elsewhere
+./install-linux.sh --full          # also install PyTorch/audio-separator now
+./install-linux.sh --no-deps       # reinstall code only
+./install-linux.sh --uninstall     # remove the app, keep models and songs
+```
+
+### 5. Windows bootstrap (`installer/bootstrap.ps1`)
+
+A scripted alternative for users who cannot run the NSIS installer.
+
+## Sizing
+
+| Component | Where it comes from | Size |
+|---|---|---|
+| Installer | NSIS, app + embedded runtime | ~30-40 MB |
+| PyTorch + audio-separator | first-run setup | ~1.6 GB |
+| FFmpeg | first-run setup | ~100 MB |
+| Model weights | first separation, lazy | ~425 MB |
+
 ## Technical risks
-- pywebview on Windows requires Edge WebView2 runtime (may need to bundle or download)
-- Inno Setup must handle long paths and Windows filename restrictions
-- Model downloads can be slow on poor connections — need progress UI
-- The frozen exe must locate FFmpeg at runtime (bundled next to the exe)
+
+- The embedded runtime must find the package: `python311._pth` needs the `..` entry, or
+  `import sound_razor` fails at launch. This broke every installed copy once and is only
+  caught by running the real installed exe, not a dev venv.
+- pywebview on Windows needs the Edge WebView2 runtime, which may need bundling or
+  downloading on older systems.
+- NSIS must cope with long paths and Windows filename restrictions.
+- Model and dependency downloads can be slow on poor connections; the setup screen shows
+  per-stage progress for this reason.
+- The frozen exe must locate FFmpeg at runtime, since it is installed outside the app
+  directory.
