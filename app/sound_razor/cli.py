@@ -19,8 +19,12 @@ def parser() -> argparse.ArgumentParser:
     split.add_argument("--output", "--output-folder", type=Path,
                        help="Destination folder (created if needed). Default: input folder/filename without extension; YouTube: stems/track-<id>.")
     split.add_argument("--model", help=f"Override automatic model selection (default: {DEFAULT_MODEL})")
-    split.add_argument("--stems", nargs="+", choices=STEM_CHOICES,
-                       help="Stems to save; other includes unselected parts. Default: all six Demucs stems.")
+    split.add_argument("--stems", nargs="*", choices=STEM_CHOICES,
+                       help="Stems that get their own file. Pass it empty for a plan with no own files.")
+    split.add_argument("--group", nargs="+", choices=STEM_CHOICES,
+                       help="Stems folded into other.flac; they are mixed in and not written on their own.")
+    split.add_argument("--split-guitar", action="store_true",
+                       help="Split the guitar stem into lead and rhythm after separation.")
     split.add_argument("--start", type=float, help="Start of the section in seconds (requires --end)")
     split.add_argument("--end", type=float, help="End of the section in seconds (requires --start)")
     split.add_argument("--cache", type=Path, default=Path(".sound-razor/models"))
@@ -82,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
             result = [str(path) for path in separate(
                 str(args.file) if args.file else args.youtube,
                 args.output, args.model, args.cache, youtube=bool(args.youtube), stems=args.stems,
-                trim=trim,
+                group=args.group, split_guitar=args.split_guitar, trim=trim,
             )]
         print(json.dumps(result, indent=2))
         return 0

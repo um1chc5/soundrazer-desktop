@@ -1,0 +1,485 @@
+/* Advanced stem-plan dialog: the interactive diagram, the run schedule and the
+   footer. Colour policy lives here (tokens in base.css); plan.js sets only --c
+   per node and the --node-* variables from constants.js. */
+
+/* ---- dialog shell ---- */
+.plan-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(1120px, calc(100vw - 48px));
+  height: min(90vh, 920px);
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+/* The shared `dialog::backdrop` supplies the dim; only add the blur here. */
+.plan-dialog::backdrop {
+  backdrop-filter: blur(3px);
+}
+
+.plan-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 22px 0;
+}
+
+.plan-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 19px;
+  letter-spacing: -.01em;
+}
+
+.plan-head p {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.plan-pills {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  padding-top: 2px;
+}
+
+/* ---- body ---- */
+.plan-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 22px 0;
+  min-height: 0;
+}
+
+.plan-stage {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background:
+    radial-gradient(120% 90% at 0% 0%, var(--surface-2) 0%, transparent 60%),
+    var(--bg);
+  padding: 18px 20px;
+}
+
+.plan-canvas {
+  position: relative;
+  flex: none;
+  margin: auto;
+}
+
+#plan-wires,
+#plan-nodes {
+  position: absolute;
+  inset: 0;
+}
+
+#plan-wires {
+  overflow: visible;
+  pointer-events: none;
+}
+
+.plan-flow {
+  fill: none;
+  stroke-linecap: round;
+  stroke-dasharray: 9 300;
+  stroke-dashoffset: 0;
+  animation-name: plan-flow;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes plan-flow {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -309; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-flow { animation: none; opacity: .5; }
+}
+
+/* ---- nodes ---- */
+.plan-node {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+
+.plan-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.plan-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c, var(--text-3));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--c, transparent) 55%, transparent);
+}
+
+/* connection handles, drawn as the tiny stub that meets the wire */
+.plan-h {
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 1px;
+  background: var(--line-strong);
+}
+
+.plan-h.in { left: -8px; }
+.plan-h.out { right: -8px; }
+
+.plan-root {
+  --c: var(--accent);
+  border-style: dashed;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.plan-root .plan-name { text-overflow: clip; }
+
+.plan-stem {
+  cursor: pointer;
+  border-color: color-mix(in srgb, var(--c) 34%, var(--line-strong));
+}
+
+.plan-stem:hover { background: var(--surface-2); }
+
+.plan-stem[data-state="off"] {
+  border-style: dashed;
+  background: transparent;
+  /* keeps its accent: the dot is the identity, the badge is the state */
+}
+
+.plan-stem[data-state="off"] .plan-name { color: var(--text-3); }
+.plan-stem[data-state="off"] .plan-dot { box-shadow: none; opacity: .55; }
+
+.plan-stem[data-state="grouped"] {
+  border-color: color-mix(in srgb, var(--c) 45%, var(--line-strong));
+  background: color-mix(in srgb, var(--c) 9%, var(--surface));
+}
+
+.plan-leaf {
+  border-color: color-mix(in srgb, var(--c) 34%, var(--line-strong));
+  background: color-mix(in srgb, var(--c) 7%, var(--surface));
+  /* measured: 156px keeps "Rhythm" and its badge on one line at 13px */
+  padding: 0 10px;
+}
+
+.plan-leaf .plan-sub {
+  margin-left: auto;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .04em;
+}
+
+.plan-leaf[data-state="grouped"] { background: color-mix(in srgb, var(--c) 12%, var(--surface)); }
+
+/* ---- badges ---- */
+.plan-flag {
+  flex: none;
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: .05em;
+  white-space: nowrap;
+}
+
+.plan-flag.other {
+  background: var(--c-other-soft);
+  color: var(--c-other-text);
+}
+
+.plan-flag.off {
+  background: var(--surface-3);
+  color: var(--text-3);
+}
+
+/* ---- actions ---- */
+.plan-act {
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 7px;
+  border-color: var(--line-strong);
+  background: var(--bg-raised);
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.plan-act:hover { color: var(--text-2); border-color: var(--c-other-dim); }
+
+.plan-act.is-on {
+  border-color: var(--c-other);
+  background: var(--c-other-soft);
+  color: var(--c-other-text);
+}
+
+.plan-split { border-color: var(--c-split-dim); }
+
+.plan-split:hover { border-color: var(--c-split); }
+
+.plan-split.is-on {
+  border-color: var(--c-split);
+  background: var(--c-split-soft);
+  color: var(--c-split-text);
+}
+
+.plan-key {
+  margin-left: auto;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+}
+
+.plan-split.is-on .plan-key {
+  background: var(--c-split-soft);
+  color: var(--c-split-text);
+}
+
+/* ---- the other.flac group ---- */
+.plan-group {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  border-color: var(--c-other);
+  background: var(--c-other-soft);
+}
+
+.plan-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 27px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--c-other-dim);
+  color: var(--c-other-text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+
+.plan-group-head .plan-dot { --c: var(--c-other); }
+
+.plan-count {
+  margin-left: auto;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--c-other-dim);
+  font-size: 9.5px;
+}
+
+.plan-group-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 3px;
+}
+
+.plan-group-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 5px;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.plan-group-row .plan-name { flex: 1; }
+
+.plan-lock {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-3);
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.plan-eject {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.plan-eject:hover {
+  border-color: var(--c-other);
+  color: var(--c-other-text);
+}
+
+/* ---- run schedule aside ---- */
+.plan-aside {
+  display: grid;
+  flex: none;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  min-height: 0;
+}
+
+.plan-run {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 12px 13px;
+}
+
+.plan-run h3 {
+  margin: 0 0 9px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.plan-run ol {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-run li {
+  display: flex;
+  flex: 1 1 190px;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.plan-run li.is-skipped { color: var(--text-3); opacity: .55; }
+
+.plan-step-n {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 15px;
+  text-align: center;
+}
+
+.plan-step-cost {
+  margin-left: auto;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.plan-total {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.plan-warning {
+  padding: 10px 12px;
+  border: 1px solid var(--warning-soft);
+  border-radius: var(--radius);
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 11.5px;
+}
+
+.plan-warning p { margin: 0; }
+.plan-warning p + p { margin-top: 6px; }
+
+/* ---- footer ---- */
+.plan-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 22px 20px;
+}
+
+.plan-hint {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.plan-foot .btn-row {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+@media (max-width: 760px) {
+  .plan-aside { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---- the picker's advanced-mode summary (replaces the grid) ---- */
+.plan-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-other-dim);
+  border-radius: var(--radius);
+  background: var(--c-other-soft);
+  flex-wrap: wrap;
+}
+
+.plan-summary-text {
+  flex: 1 1 220px;
+  color: var(--c-other-text);
+  font-size: 12.5px;
+}
+
+.plan-open-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}

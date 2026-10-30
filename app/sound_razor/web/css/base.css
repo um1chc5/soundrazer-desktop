@@ -22,6 +22,18 @@
   --danger-soft: rgba(255, 92, 108, 0.12);
   --warning: #ffd166;
   --success: #4fe0a8;
+  /* Stem-plan diagram: the `other.flac` destination and the guitar split each get a
+     role colour, separate from the six stem accents (which come from constants.js). */
+  --c-other: #ff6f91;
+  --c-other-soft: rgba(255, 111, 145, 0.12);
+  --c-other-dim: rgba(255, 111, 145, 0.32);
+  --c-other-faint: rgba(255, 111, 145, 0.18);
+  --c-other-text: #ff9db4;
+  --c-split: #4fe0a8;
+  --c-split-soft: rgba(79, 224, 168, 0.12);
+  --c-split-dim: rgba(79, 224, 168, 0.32);
+  --c-split-text: #7ef0c6;
+  --warning-soft: rgba(255, 209, 102, 0.12);
   --radius-sm: 8px;
   --radius: 12px;
   --radius-lg: 18px;
@@ -56,6 +68,14 @@
   --appbar-bg: rgba(255, 255, 255, .78);
   --transport-bg: rgba(255, 255, 255, .88);
   --titlebar-bg: #eceef2;
+  --c-other-text: #b62a51;
+  --c-other-dim: rgba(182, 42, 81, 0.24);
+  --c-other-faint: rgba(182, 42, 81, 0.14);
+  --c-other-soft: rgba(182, 42, 81, 0.08);
+  --c-split-text: #0f7a55;
+  --c-split-dim: rgba(15, 122, 85, 0.24);
+  --c-split-soft: rgba(15, 122, 85, 0.08);
+  --warning-soft: rgba(138, 99, 0, 0.10);
   color-scheme: light;
 }
 

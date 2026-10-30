@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/css/chrome.css">
   <link rel="stylesheet" href="/css/views.css">
   <link rel="stylesheet" href="/css/song.css">
+  <link rel="stylesheet" href="/css/plan.css">
   <link rel="stylesheet" href="/css/responsive.css">
   <script type="module" src="/js/app.js"></script>
 </head>
@@ -321,6 +322,45 @@
       <p id="split-error" class="form-error" role="alert"></p>
       <div class="dialog-footer"><button type="button" class="btn btn-ghost close-dialog" data-i18n="setup.cancel">Cancel</button><button id="split-submit" type="submit" class="btn btn-primary" data-i18n="dialog.split.submit">Split into lead &amp; rhythm</button></div>
     </form>
+  </dialog>
+
+  <dialog id="plan-dialog" class="plan-dialog">
+    <header class="plan-head">
+      <div>
+        <h2 id="plan-title" data-i18n="plan.title">Separation plan</h2>
+        <p data-i18n="plan.sub">Pick each stem’s fate. Anything folded in is mixed into <code>other.flac</code> and never written on its own. This only sets the plan — Start runs it.</p>
+      </div>
+      <div class="plan-pills">
+        <span id="plan-pass-pill" class="pill">2 passes</span>
+        <span id="plan-file-pill" class="pill">9 files</span>
+      </div>
+    </header>
+    <div class="plan-body">
+      <div class="plan-stage" id="plan-stage">
+        <div class="plan-canvas">
+          <svg id="plan-wires" aria-hidden="true"></svg>
+          <div id="plan-nodes"></div>
+        </div>
+      </div>
+      <aside class="plan-aside">
+        <section class="plan-run">
+          <h3 data-i18n="plan.runsHeading">Run schedule</h3>
+          <ol id="plan-run-list"></ol>
+          <p id="plan-run-total" class="plan-total"></p>
+        </section>
+        <div id="plan-warning" class="plan-warning" hidden>
+          <div id="plan-warning-text"></div>
+        </div>
+      </aside>
+    </div>
+    <div class="plan-foot">
+      <p id="plan-foot-hint" class="plan-hint"></p>
+      <div class="btn-row">
+        <button id="plan-reset" type="button" class="btn btn-ghost" data-i18n="plan.reset">Reset</button>
+        <button type="button" class="btn btn-ghost close-dialog" data-i18n="setup.cancel">Cancel</button>
+        <button id="plan-confirm" type="button" class="btn btn-primary" data-i18n="plan.confirm">Use this plan</button>
+      </div>
+    </div>
   </dialog>
 
   <dialog id="export-dialog" class="dialog-wide">

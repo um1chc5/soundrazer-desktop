@@ -194,11 +194,17 @@ export async function continuePending() {
   const job = store.pending?.jobId && findJob(store.pending.jobId);
   if (!job) return;
   if (job.status === 'succeeded' && job.project) {
-    const {preset, stems} = store.pending; store.pending = null;
+    const request = pendingRequest(store.pending);
+    store.pending = null;
     $('youtube-url').value = '';
-    try { await api(`${projectUrl(job.project)}/separate`, {root: store.state.root, preset, stems}); await nav.refresh(); nav.selectProject(job.project); }
+    try { await api(`${projectUrl(job.project)}/separate`, {root: store.state.root, ...request}); await nav.refresh(); nav.selectProject(job.project); }
     catch (error) { notice(error.message, 'error'); await nav.refresh(); nav.selectProject(job.project); }
   } else if (['failed', 'cancelled'].includes(job.status)) {
     store.pending = {failed: job.id};
   }
+}
+
+/** A pending choice's separation fields, without the job bookkeeping around them. */
+function pendingRequest({preset, stems, group, split}) {
+  return {preset, stems, ...(group ? {group} : {}), ...(split ? {split: true} : {})};
 }

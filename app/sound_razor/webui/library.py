@@ -26,6 +26,8 @@ from ..setup_env import (FFMPEG_SIZE_MB, RUNTIME_SIZE_MB, SEPARATION_SIZE_MB, YO
                          ffmpeg_ok, runtime_ok, separation_ok, youtube_ok, run_setup)
 
 CUSTOM_STEMS = ("vocals", "guitar", "bass", "drums", "piano", "other")
+# A plan may also fold in the guitar-split outputs; they are produced mid-run.
+PLAN_GROUP_STEMS = (*CUSTOM_STEMS, "lead", "rhythm")
 
 # Staging-directory prefixes left behind by interrupted runs. The startup sweep only
 # removes directories matching these prefixes, never follows symlinks, and never
@@ -47,6 +49,32 @@ def selection_stems(preset, stems=None):
     if any(not isinstance(stem, str) or stem not in CUSTOM_STEMS for stem in stems):
         raise ValueError("Unknown custom stem.")
     return list(dict.fromkeys(stems))
+
+
+def validate_group(group):
+    """None keeps the legacy `--stems other,…` folding; a list is an explicit plan."""
+    if group is None:
+        return None
+    if not isinstance(group, list):
+        raise ValueError("Invalid stem plan.")
+    if any(not isinstance(name, str) or name not in PLAN_GROUP_STEMS for name in group):
+        raise ValueError("Unknown stem in the plan.")
+    return list(dict.fromkeys(group))
+
+
+def plan_stems(preset, stems, group=None):
+    """Own files for a job. An explicit plan may keep none of them, as long as
+    something is folded; the empty list is then deliberate, not a mistake."""
+    if group is None:
+        return selection_stems(preset, stems)
+    if not isinstance(stems, list):
+        raise ValueError("Invalid stem plan.")
+    if any(not isinstance(stem, str) or stem not in CUSTOM_STEMS for stem in stems):
+        raise ValueError("Unknown custom stem.")
+    chosen = list(dict.fromkeys(stems))
+    if not chosen and not group:
+        raise ValueError("Select at least one instrument.")
+    return chosen
 
 
 # tqdm bars from audio-separator, e.g. " 45%|████▌     | 23/51 [00:12<00:15,  1.80it/s]"
@@ -385,10 +413,10 @@ class Library:
         try:
             if kind == "separate":
                 self._separate(job, job["_project"], job["_original"], job["_stems"],
-                               job["_guitar_split"], job["_trim"])
+                               job.get("_group"), job.get("_split_leaves", False), job["_trim"])
             elif kind == "split-guitar":
                 self._separate(job, job["_project"], job["_original"], job["_stems"],
-                               True, job["_trim"])
+                               None, False, job["_trim"])
             elif kind == "youtube":
                 self._youtube(job, job["_root"], job["_url"], job["_fields"])
             elif kind == "setup":
@@ -408,38 +436,57 @@ class Library:
 
     # ---------------------------------------------------------------- start
 
-    def start(self, identifier: str, preset: str, stems=None, *, guitar_split=False, trim=None):
+    def start(self, identifier: str, preset: str, stems=None, *, group=None,
+              split_leaves=False, guitar_split=False, trim=None):
         with self.lock:
-            chosen = ['lead', 'rhythm'] if guitar_split else selection_stems(preset, stems)
+            chosen_group = validate_group(group)
+            chosen = ['lead', 'rhythm'] if guitar_split else plan_stems(preset, stems, chosen_group)
             project = project_path(self.require_root(), identifier)
             info = describe_project(project)
             if not guitar_split and not info["original"]:
                 raise ValueError("This project needs an unambiguous original audio file.")
             if (project / "stems").is_symlink():
                 raise ValueError("The stems folder must not be a symlink.")
-            if guitar_split:
-                guitar = stem_file(project/'stems', 'guitar')
-                if guitar not in {item['file'] for item in info['stems']}:
-                    raise ValueError('Separate the guitar track first.')
-                if any(p.is_symlink() or not p.is_file() for p in (project/'stems').iterdir()):
-                    raise ValueError('The stems folder must contain regular files only.')
-                if any((project/'stems'/f'{name}{ext}').exists()
-                       for name in ('lead', 'rhythm') for ext in ('.flac', '.wav')):
-                    raise ValueError('This project already contains lead or rhythm tracks.')
-                trim_source = project / 'stems' / guitar
-                saved_trim = parse_trim(trim, probe_duration(trim_source), 2.0) if trim is not None else None
-            else:
-                saved_trim = parse_trim(trim, probe_duration(project / info["original"]), 1.0) if trim is not None else None
-            self.job_logs.pop(identifier, None)  # no-op safety; logs are keyed by job id
-            job = {"id": uuid.uuid4().hex, "kind": "split-guitar" if guitar_split else "separate",
-                   "project": identifier, "status": "queued",
-                   "started": time.time(), "finished": None, "error": None,
-                   "preset": preset, "stems": chosen, "guitar_split": guitar_split,
-                   "trim": {"start": saved_trim[0], "end": saved_trim[1]} if saved_trim else None,
-                   "phase": "prepare", "progress": 0, "eta": None,
-                   "_project": project, "_original": info["original"],
-                   "_stems": chosen, "_guitar_split": guitar_split, "_trim": saved_trim}
-            return self._enqueue(job)
+            if split_leaves and guitar_split:
+                raise ValueError("A split-only job cannot also split the guitar.")
+            return self._enqueue_separation(identifier, preset, chosen, chosen_group,
+                                            split_leaves, guitar_split, info, project, trim)
+
+    def _start_trim(self, project, info, guitar_split, trim):
+        if trim is None:
+            return None
+        if guitar_split:
+            guitar = stem_file(project / 'stems', 'guitar')
+            return parse_trim(trim, probe_duration(project / 'stems' / guitar), 2.0)
+        return parse_trim(trim, probe_duration(project / info["original"]), 1.0)
+
+    def _validate_split_job(self, project, info):
+        guitar = stem_file(project / 'stems', 'guitar')
+        if guitar not in {item['file'] for item in info['stems']}:
+            raise ValueError('Separate the guitar track first.')
+        if any(p.is_symlink() or not p.is_file() for p in (project / 'stems').iterdir()):
+            raise ValueError('The stems folder must contain regular files only.')
+        if any((project / 'stems' / f'{name}{ext}').exists()
+               for name in ('lead', 'rhythm') for ext in ('.flac', '.wav')):
+            raise ValueError('This project already contains lead or rhythm tracks.')
+        return project / 'stems' / guitar
+
+    def _enqueue_separation(self, identifier, preset, chosen, chosen_group, split_leaves,
+                            guitar_split, info, project, trim):
+        if guitar_split:
+            self._validate_split_job(project, info)
+        saved_trim = self._start_trim(project, info, guitar_split, trim)
+        job = {"id": uuid.uuid4().hex, "kind": "split-guitar" if guitar_split else "separate",
+               "project": identifier, "status": "queued",
+               "started": time.time(), "finished": None, "error": None,
+               "preset": preset, "stems": chosen, "group": chosen_group or [],
+               "guitar_split": guitar_split, "split_leaves": bool(split_leaves),
+               "trim": {"start": saved_trim[0], "end": saved_trim[1]} if saved_trim else None,
+               "phase": "prepare", "progress": 0, "eta": None,
+               "_project": project, "_original": info["original"],
+               "_stems": chosen, "_group": chosen_group,
+               "_split_leaves": bool(split_leaves), "_trim": saved_trim}
+        return self._enqueue(job)
 
     def import_youtube(self, data):
         url = youtube_url(data.get('url'))
@@ -545,21 +592,14 @@ class Library:
             with self.lock:
                 self._finish(job)
 
-    def _separate(self, job, project: Path, original: str, stems: list[str], guitar_split=False, trim=None):
+    def _separate(self, job, project: Path, original: str, stems: list[str],
+                  group=None, split_leaves=False, trim=None):
         job_id = job["id"]
         try:
             with tempfile.TemporaryDirectory(prefix=".separation-", dir=project) as temporary:
                 stage = Path(temporary) / "stems"
-                range_args = ["--start", f"{trim[0]:.3f}", "--end", f"{trim[1]:.3f}"] if trim else []
-                if guitar_split:
-                    shutil.copytree(project/'stems', stage)
-                    command = [sys.executable, '-m', 'sound_razor', 'split-guitar',
-                               '--file', str(stage/stem_file(stage, 'guitar')), '--output', str(stage),
-                               '--cache', str(self.cache), *range_args]
-                else:
-                    command = [sys.executable, "-m", "sound_razor", "separate", "--file", str(project / original),
-                               "--output", str(stage), "--cache", str(self.cache), "--stems", *stems,
-                               *range_args]
+                command = self._separation_command(job, project, original, stage,
+                                                   stems, group, split_leaves, trim)
                 # UTF-8 both ways, so non-ASCII song titles and paths survive the pipe on Windows.
                 env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8", ORT_DISABLE_TELEMETRY="1")
                 with self.lock:
@@ -580,10 +620,7 @@ class Library:
                         return
                 if code != 0:
                     raise RuntimeError(f"Separation CLI exited with code {code}. See the process log.")
-                for stem in stems:
-                    path = stage / f"{stem}.flac"
-                    if not path.is_file() or path.stat().st_size <= 44:
-                        raise RuntimeError(f"CLI did not produce {stem}.flac.")
+                self._expect_outputs(stage, stems, group)
                 # Publish only a successful run; preserve the old stems on failure.
                 with self.lock:
                     if job["status"] == "cancelling":
@@ -606,6 +643,36 @@ class Library:
         finally:
             with self.lock:
                 self._finish(job)
+
+    def _separation_command(self, job, project: Path, original: str, stage: Path,
+                            stems: list[str], group, split_leaves: bool, trim):
+        range_args = ["--start", f"{trim[0]:.3f}", "--end", f"{trim[1]:.3f}"] if trim else []
+        if job["kind"] == "split-guitar":
+            shutil.copytree(project / 'stems', stage)
+            return [sys.executable, '-m', 'sound_razor', 'split-guitar',
+                    '--file', str(stage / stem_file(stage, 'guitar')), '--output', str(stage),
+                    '--cache', str(self.cache), *range_args]
+        command = [sys.executable, "-m", "sound_razor", "separate", "--file", str(project / original),
+                   "--output", str(stage), "--cache", str(self.cache)]
+        if group is not None:
+            # An explicit plan may legitimately keep no stem of its own, so send
+            # --stems unconditionally (nargs="*") to mean "own files = these".
+            command += ["--stems", *stems]
+            if group:
+                command += ["--group", *group]
+        elif stems:
+            command += ["--stems", *stems]
+        if split_leaves:
+            command += ["--split-guitar"]
+        return command + range_args
+
+    def _expect_outputs(self, stage: Path, stems: list[str], group):
+        """A merged stem must NOT reach the stage: only own files and other.flac do."""
+        names = [*stems, *(['other'] if group else [])]
+        for name in dict.fromkeys(names):
+            path = stage / f"{name}.flac"
+            if not path.is_file() or path.stat().st_size <= 44:
+                raise RuntimeError(f"CLI did not produce {name}.flac.")
 
     def start_export(self, identifier: str, formats, stems, *, prevent_clipping=True):
         with self.lock:

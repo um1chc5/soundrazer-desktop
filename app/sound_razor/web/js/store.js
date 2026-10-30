@@ -8,6 +8,7 @@ export const store = {
   newTrimEditor: null, newTrimRange: null, newTrimDuration: 0, newBuffer: null,
   newTrimEpoch: 0,
   songTrimEditor: null, songTrimRange: null, songTrimKey: '',
+  songPlanFor: null,
   splitEditor: null, splitRange: null, splitProject: null,
   exportPending: null, exportOffered: null,
 };

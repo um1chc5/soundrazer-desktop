@@ -23,6 +23,38 @@ MODEL_STEMS = {
     DEFAULT_MODEL: ("vocals", "drums", "bass", "guitar", "piano", "other"),
 }
 STEM_CHOICES = ("vocals", "drums", "bass", "guitar", "piano", "other", "instrumental")
+# Produced by the guitar split, not by a separation model.
+LEAF_STEMS = ("lead", "rhythm")
+
+
+def model_request(own, grouped, split_guitar):
+    """The stems a model must produce for this plan; leaves come from the split."""
+    if own is None and grouped is None:
+        return None
+    required = set(own or ()) | set(grouped or ())
+    if required & set(LEAF_STEMS) and not split_guitar:
+        raise ValueError("lead and rhythm need the guitar split; pass --split-guitar.")
+    required -= set(LEAF_STEMS)
+    if split_guitar:
+        required.add("guitar")
+    if not required:
+        raise ValueError("Choose at least one stem.")
+    return sorted(required)
+
+
+def legacy_group(model, own, grouped):
+    """`--stems other,drums` predates `--group`: keep folding the unselected in."""
+    if grouped is not None or own is None or "other" not in own:
+        return grouped
+    return ("other", *[stem for stem in MODEL_STEMS.get(model, ()) if stem not in own])
+
+
+def publish_names(model, own, grouped):
+    """Exactly the files that reach the destination; group members are absent."""
+    names = list(own) if own is not None else list(MODEL_STEMS.get(model, ()))
+    if grouped:
+        names.append("other")
+    return tuple(dict.fromkeys(names))
 
 
 def select_model(model: str | None, stems: list[str] | None) -> tuple[str, tuple[str, ...] | None]:
@@ -49,37 +81,42 @@ def select_model(model: str | None, stems: list[str] | None) -> tuple[str, tuple
     return model, requested if requested is not None else supported
 
 
-def combine_other(by_stem: dict[str, Path], model_stems: tuple[str, ...],
-                  selected: tuple[str, ...]) -> None:
-    """Fold unselected model outputs into Other."""
-    if "other" not in selected:
-        return
-    available = set(model_stems)
-    names = ["other", *sorted(available - set(selected))]
-    missing = set(names) - by_stem.keys()
+def mix_stems(sources: list[Path], destination: Path) -> None:
+    """amix `sources` into `destination` as 24-bit FLAC.
+
+    Group members exist only inside this file: callers publish the result and
+    never the members, which is how a merged stem disappears from disk.
+    """
+    missing = [str(source) for source in sources if not source.is_file()]
     if missing:
-        raise RuntimeError(f"Cannot build Other; missing stems: {', '.join(sorted(missing))}")
-    if len(names) == 1:
+        raise RuntimeError("Cannot build Other; missing stems: " + ", ".join(missing))
+    if len(sources) == 1:
+        _flac_copy(sources[0], destination)
         return
-    destination = by_stem["other"]
     # Float WAV preserves sums above full scale without clipping or changing gain.
     # Write separately because FFmpeg cannot overwrite an input it is reading.
     with tempfile.TemporaryDirectory(prefix="other-mix-", dir=destination.parent) as temporary:
         mixed = Path(temporary) / "other.wav"
-        inputs = [argument for name in names for argument in ("-i", str(by_stem[name]))]
+        inputs = [argument for source in sources for argument in ("-i", str(source))]
         subprocess.run([
             "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", *inputs,
-            "-filter_complex", f"amix=inputs={len(names)}:duration=longest:normalize=0",
+            "-filter_complex", f"amix=inputs={len(sources)}:duration=longest:normalize=0",
             "-c:a", "pcm_f32le", str(mixed),
         ], check=True, stdout=sys.stderr)
-        # Store the final Other stem as 24-bit FLAC: FLAC has no float format, and
-        # 24-bit keeps the float mix's precision at roughly half the size of WAV.
-        flac = Path(temporary) / "other.flac"
-        subprocess.run([
-            "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
-            "-i", str(mixed), "-c:a", "flac", "-sample_fmt", "s32", "-bits_per_raw_sample", "24", str(flac),
-        ], check=True, stdout=sys.stderr)
-        flac.replace(destination)
+        _flac_copy(mixed, destination)
+
+
+def _flac_copy(source: Path, destination: Path) -> None:
+    """Transcode to 24-bit FLAC via a sibling file so `source` may be replaced."""
+    temporary = destination.with_name(destination.stem + ".tmp.flac")
+    # FLAC has no float format; 24-bit keeps the float mix's precision at roughly
+    # half the size of WAV.
+    subprocess.run([
+        "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+        "-i", str(source), "-c:a", "flac", "-sample_fmt", "s32",
+        "-bits_per_raw_sample", "24", str(temporary),
+    ], check=True, stdout=sys.stderr)
+    temporary.replace(destination)
 
 
 def probe_duration(path: Path) -> float:
@@ -169,16 +206,7 @@ def output_directory(source: str, output: Path | None, youtube: bool = False) ->
     return directory
 
 
-def separate(source: str, output: Path | None = None, model: str | None = None,
-             cache: Path = Path(".sound-razor/models"), youtube: bool = False,
-             stems: list[str] | None = None, trim=None) -> list[Path]:
-    model, selected_stems = select_model(model, stems)
-    if not youtube and not Path(source).expanduser().is_file():
-        raise ValueError(f"Audio file does not exist: {source}")
-    output = output_directory(source, output, youtube)
-    original = None if youtube else Path(source).expanduser().resolve()
-    settings = output / "separation.json"
-    validate_outputs(original, [output / f"{stem}.flac" for stem in selected_stems or ()] + [settings])
+def require_runtime(youtube: bool) -> None:
     if not ensure_ffmpeg_on_path():
         raise RuntimeError(MISSING_FFMPEG)
     if importlib.util.find_spec("audio_separator") is None:
@@ -186,11 +214,106 @@ def separate(source: str, output: Path | None = None, model: str | None = None,
     if youtube and importlib.util.find_spec("yt_dlp") is None:
         raise RuntimeError('YouTube support is not installed. Install it from the YouTube tab in the app '
                            '(or, from a dev checkout: pip install -e ".[youtube]").')
+
+
+def _run_demucs(model: str, normalized: Path, stage: Path, cache: Path) -> dict[str, Path]:
+    print(f"Loading model {model}", file=sys.stderr, flush=True)
+    # Upstream progress/prints must not corrupt the JSON result on stdout.
+    with contextlib.redirect_stdout(sys.stderr):
+        separator = create_separator(
+            output_dir=str(stage), output_format="FLAC",
+            model_file_dir=str(cache), log_level=logging.WARNING,
+            mdx_params={"hop_length": 1024, "segment_size": 256,
+                        "overlap": 0.25, "batch_size": 1, "enable_denoise": False},
+            demucs_params={"segment_size": "Default", "shifts": 0,
+                           "overlap": 0.25, "segments_enabled": True},
+        )
+        separator.load_model(model_filename=model)
+        print(f"Separating with {model}; model outputs: "
+              f"{', '.join(MODEL_STEMS.get(model, ())) or 'all'}", file=sys.stderr)
+        names = {stem: stem for stem in MODEL_STEMS.get(model, ())}
+        results = separator.separate(str(normalized), custom_output_names=names or None)
+        del separator
+    print("Writing stems", file=sys.stderr, flush=True)
+    paths = [stage / Path(name).name for name in results]
+    if len(paths) < 2 or any(not path.is_file() or path.stat().st_size <= 44 for path in paths):
+        raise RuntimeError("Separator did not produce valid stem files.")
+    return {path.stem: path for path in paths}
+
+
+def _run_guitar_split(by_stem: dict[str, Path], stage: Path, cache: Path):
+    from .guitar_split import split_guitar as split_into_leaves
+    if "guitar" not in by_stem:
+        raise RuntimeError("The plan splits the guitar but the model did not produce one.")
+    print("Splitting guitar", file=sys.stderr, flush=True)
+    # The stems are already trimmed to the chosen section, so no trim is passed on.
+    return {path.stem: path for path in split_into_leaves(by_stem["guitar"], stage, cache)}
+
+
+def _build_other(by_stem: dict[str, Path], grouped) -> Path | None:
+    """Mix the group into other.flac. Members are inputs only and stay unpublished."""
+    if not grouped:
+        return None
+    names = list(dict.fromkeys(grouped))
+    missing = [name for name in names if name not in by_stem]
+    if missing:
+        raise RuntimeError("The plan folds stems this run did not produce: " + ", ".join(sorted(missing)))
+    destination = by_stem.get("other") or by_stem[names[0]].with_name("other.flac")
+    if names != ["other"]:
+        mix_stems([by_stem[name] for name in names], destination)
+    return destination
+
+
+def _collect(by_stem: dict[str, Path], names, other: Path | None) -> list[Path]:
+    missing = [name for name in names if name not in by_stem]
+    if missing:
+        raise RuntimeError("Model did not produce requested stems: " + ", ".join(sorted(missing)))
+    paths = [by_stem[name] for name in names]
+    if other is not None and other not in paths:
+        paths.append(other)
+    return paths
+
+
+def resolve_plan(model: str | None, own, grouped, split_guitar: bool):
+    """Choose the model and expand the flags into `(model, own, grouped)`.
+
+    `other` is the group's destination, so it is folded in whenever the model has
+    one — the same rule the dialog enforces. `--group` without `--stems` keeps
+    everything that is not folded."""
+    model = select_model(model, model_request(own, grouped, split_guitar))[0]
+    grouped = legacy_group(model, own, grouped)
+    if grouped is None:
+        return model, own, grouped
+    produced = MODEL_STEMS.get(model, ())
+    if "other" in produced and "other" not in grouped:
+        grouped = (*grouped, "other")
+    if own is None:
+        own = tuple(name for name in produced if name not in grouped)
+    return model, own, grouped
+
+
+def separate(source: str, output: Path | None = None, model: str | None = None,
+             cache: Path = Path(".sound-razor/models"), youtube: bool = False,
+             stems: list[str] | None = None, group: list[str] | None = None,
+             split_guitar: bool = False, trim=None) -> list[Path]:
+    """Separate `source`. `stems` get their own files; `group` is folded into
+    other.flac and never written as a file of its own."""
+    own = None if stems is None else tuple(dict.fromkeys(stems))
+    grouped = None if group is None else tuple(dict.fromkeys(group))
+    model, own, grouped = resolve_plan(model, own, grouped, split_guitar)
+    names = publish_names(model, own, grouped)
+    if not youtube and not Path(source).expanduser().is_file():
+        raise ValueError(f"Audio file does not exist: {source}")
+    output = output_directory(source, output, youtube)
+    original = None if youtube else Path(source).expanduser().resolve()
+    settings = output / "separation.json"
+    validate_outputs(original, [output / f"{name}.flac" for name in names] + [settings])
+    require_runtime(youtube)
     cache = cache.expanduser().resolve()
     cache.mkdir(parents=True, exist_ok=True)
     import torch
     torch.set_num_threads(cpu_threads())
-    
+
     with tempfile.TemporaryDirectory(prefix="sound-razor-") as temporary:
         work = Path(temporary)
         audio = youtube_audio(source, work) if youtube else Path(source).expanduser().resolve()
@@ -205,38 +328,16 @@ def separate(source: str, output: Path | None = None, model: str | None = None,
         # temp-dir copy (one fewer full stem-set write per job).
         with tempfile.TemporaryDirectory(prefix=".stems-", dir=output) as staged:
             stage = Path(staged)
-            print(f"Loading model {model}", file=sys.stderr, flush=True)
-            # Upstream progress/prints must not corrupt the JSON result on stdout.
-            with contextlib.redirect_stdout(sys.stderr):
-                separator = create_separator(
-                    output_dir=str(stage), output_format="FLAC",
-                    model_file_dir=str(cache), log_level=logging.WARNING,
-                    mdx_params={"hop_length": 1024, "segment_size": 256,
-                                "overlap": 0.25, "batch_size": 1, "enable_denoise": False},
-                    demucs_params={"segment_size": "Default", "shifts": 0,
-                                   "overlap": 0.25, "segments_enabled": True},
-                )
-                separator.load_model(model_filename=model)
-                print(f"Separating with {model}; stems: "
-                      f"{', '.join(selected_stems) if selected_stems else 'all model outputs'}", file=sys.stderr)
-                names = {stem: stem for stem in MODEL_STEMS.get(model, ())}
-                results = separator.separate(str(normalized), custom_output_names=names or None)
-                del separator
-            print("Writing stems", file=sys.stderr, flush=True)
-            paths = [stage / Path(name).name for name in results]
-            if len(paths) < 2 or any(not path.is_file() or path.stat().st_size <= 44 for path in paths):
-                raise RuntimeError("Separator did not produce valid stem files.")
-            if selected_stems is not None:
-                by_stem = {path.stem: path for path in paths}
-                missing = set(selected_stems) - set(by_stem)
-                if missing:
-                    raise RuntimeError(f"Model did not produce requested stems: {', '.join(sorted(missing))}")
-                combine_other(by_stem, MODEL_STEMS.get(model, ()), selected_stems)
-                paths = [by_stem[stem] for stem in selected_stems]
-            # Persist requested stems, with unselected parts folded into Other when requested.
+            by_stem = _run_demucs(model, normalized, stage, cache)
+            split_settings = {}
+            if split_guitar:
+                by_stem.update(_run_guitar_split(by_stem, stage, cache))
+                split_settings = _read_settings(stage / settings.name)
+            other = _build_other(by_stem, grouped)
+            paths = _collect(by_stem, names, other)
             destinations = [output / path.name for path in paths]
             validate_outputs(original, destinations + [settings])
-            settings_value = {"stems": selected_stems}
+            settings_value = {**split_settings, "stems": list(names), "group": list(grouped or ())}
             if saved_trim is not None:
                 settings_value["trim"] = {"start": saved_trim[0], "end": saved_trim[1]}
             (stage / settings.name).write_text(json.dumps(settings_value, indent=2) + "\n", encoding="utf-8")
@@ -244,6 +345,16 @@ def separate(source: str, output: Path | None = None, model: str | None = None,
             for destination in destinations + [settings]:
                 (stage / destination.name).replace(destination)
         return [path.resolve() for path in destinations]
+
+
+def _read_settings(path: Path) -> dict:
+    if not path.is_file():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 def train(dataset: Path) -> None:
