@@ -14,7 +14,7 @@ Unweave is a local desktop stem separator with a Python backend and vanilla ES-m
 | 06 | [Close behavior](06-close-behavior.md) | Done (Phase 1) | Confirm-on-close dialog, clean cancel with orphan prevention, and stale-staging-directory sweep at startup. Resume rejected; optional job-state persistence remains. |
 | 07 | [Disk usage and cache](07-disk-usage.md) | Done (Phase 1) | Canonical stems switched from WAV to FLAC (~40–50% smaller, lossless); stale-staging-directory sweep at startup. Uninstall model-cache prompt, disk precheck, cleanup UI remain. |
 | 08 | [Performance and hidden optimizations](08-performance.md) | Done (Items 1–2) | CPU-derived thread count replaces hardcoded 4 threads in both RoFormer and Demucs/MDX paths; separator writes directly into project staging, eliminating one redundant full stem-set copy per job (~485 MB saved). Remaining: benchmarking, Windows Defender measurement. |
-| — | Web module/CSS refactor | Done | ES modules are under `web/js/`; five CSS files are under `web/css/`; static serving uses generic safe handling. |
+| — | Web module/CSS refactor | Done | ES modules are under `web/js/`; six CSS files are under `web/css/`; static serving uses generic safe handling. |
 | — | Python package refactor | Done | Split into `audio/`, `projects/`, and `webui/` is complete; package-layout smoke tests pass. |
 
 ### How to read status

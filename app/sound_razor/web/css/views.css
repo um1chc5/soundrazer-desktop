@@ -236,6 +236,11 @@
 .progress-view.busy .pv-spin { opacity: 1; animation: spin 1.4s linear infinite; }
 .progress-view[data-status=failed] .pv-bar { stroke: var(--danger); filter: none; }
 .progress-view[data-status=cancelled] .pv-bar { stroke: var(--text-3); filter: none; }
+/* Second pass: the guitar model is a different network and much slower than the stem
+   model, so it gets its own colour while the ring keeps counting overall progress. */
+.progress-view[data-pass=guitar] .pv-bar { filter: drop-shadow(0 0 6px rgba(157, 140, 255, .55)); }
+.progress-view[data-pass=guitar] .pv-steps li.active { border-color: rgba(157, 140, 255, .45); background: rgba(157, 140, 255, .07); }
+.progress-view[data-pass=guitar] .pv-steps li.active::before { background: #9d8cff; color: #140a2b; animation: none; }
 .pv-pct { position: absolute; inset: 0; display: flex; align-items: baseline; justify-content: center; padding-top: 58px; }
 .pv-num { font-family: var(--font-display); font-size: 44px; font-weight: 700; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
 .pv-pct small { font-size: 18px; color: var(--text-3); margin-left: 2px; font-weight: 600; }
@@ -249,7 +254,10 @@
 .pv-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .pv-stats > div { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: var(--radius); background: var(--bg); border: 1px solid var(--line); }
 .pv-stats strong { font-family: var(--font-mono); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pv-steps { list-style: none; display: flex; gap: 6px; counter-reset: step; }
+/* The checklist sits under the ring, one row per step: queued steps show a number,
+   the running step shows its own live percentage, finished steps show a check. Each
+   step's percentage is its own 0-100, not a slice of one shared bar. */
+.pv-steps { list-style: none; display: flex; gap: 6px; counter-reset: step; grid-column: 1 / -1; }
 .pv-steps li {
   flex: 1;
   counter-increment: step;
@@ -282,7 +290,17 @@
 .pv-steps li.done { color: var(--text-2); }
 .pv-steps li.done::before { content: '✓'; background: rgba(79, 224, 168, .15); color: var(--success); }
 .pv-steps li.active { color: var(--text); border-color: var(--accent-ring); background: rgba(255, 138, 61, .06); }
-.pv-steps li.active::before { background: var(--accent); color: var(--on-accent); animation: blink 1.2s ease-in-out infinite; }
+.pv-steps li.active::before { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+/* While a step reports real progress its chip shows that step's own percentage. */
+.pv-steps li.active[data-pct]::before {
+  content: attr(data-pct);
+  width: auto;
+  min-width: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  font-size: 9px;
+  animation: none;
+}
 .pv-steps li.failed { color: var(--danger); border-color: rgba(255, 92, 108, .4); }
 .pv-steps li.failed::before { content: '!'; background: var(--danger); color: #fff; }
 .pv-linebar { display: none; height: 4px; border-radius: 4px; background: var(--surface-3); overflow: hidden; }

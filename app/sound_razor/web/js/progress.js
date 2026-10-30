@@ -1,4 +1,4 @@
-import {SETUP_STEPS, YOUTUBE_STEPS, GUITAR_STEPS, SEPARATION_STEPS, EXPORT_STEPS, SETUP_STAGE_LABEL, SETUP_PHASE_TITLE, SETUP_PHASE_SUB} from './constants.js';
+import {SETUP_STEPS, YOUTUBE_STEPS, GUITAR_STEPS, SEPARATION_STEPS, SEPARATION_SPLIT_STEPS, EXPORT_STEPS, SETUP_STAGE_LABEL, SETUP_PHASE_TITLE, SETUP_PHASE_SUB} from './constants.js';
 import {$, el, api, notice, serverNow, duration} from './core.js';
 import {store, nav} from './store.js';
 import {t, onLangChange} from './i18n.js';
@@ -6,7 +6,10 @@ import {t, onLangChange} from './i18n.js';
 export function buildProgress(panel) {
   panel.innerHTML = `
     <div class="pv-ring" aria-hidden="true">
-      <svg viewBox="0 0 120 120"><defs><linearGradient id="${panel.id}-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb35c"/><stop offset="1" stop-color="#ff5c6c"/></linearGradient></defs>
+      <svg viewBox="0 0 120 120"><defs>
+        <linearGradient id="${panel.id}-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb35c"/><stop offset="1" stop-color="#ff5c6c"/></linearGradient>
+        <linearGradient id="${panel.id}-g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9d8cff"/><stop offset="1" stop-color="#5cc8ff"/></linearGradient>
+      </defs>
         <circle class="pv-track" cx="60" cy="60" r="52"/><circle class="pv-bar" cx="60" cy="60" r="52" stroke="url(#${panel.id}-g)"/><circle class="pv-spin" cx="60" cy="60" r="52"/></svg>
       <div class="pv-pct"><span class="pv-num">0</span><small>%</small></div>
     </div>
@@ -17,11 +20,12 @@ export function buildProgress(panel) {
         <div><span class="eyebrow pv-eyebrow-elapsed"></span><strong class="pv-elapsed">0s</strong></div>
         <div><span class="eyebrow pv-eyebrow-stems"></span><strong class="pv-stems">—</strong></div>
       </div>
-      <ol class="pv-steps"></ol>
       <div class="pv-linebar"><i></i></div>
       <details class="log-details"><summary class="pv-log-summary"></summary><pre class="log-output pv-log"></pre></details>
-    </div>`;
+    </div>
+    <ol class="pv-steps"></ol>`;
   panel.querySelector('.pv-cancel').onclick = async event => {
+
     event.currentTarget.disabled = true;
     // Cancel this panel's job only; other running or queued jobs keep going.
     try { await api('/api/cancel', panel.dataset.jobId ? {job_id: panel.dataset.jobId} : {}); await nav.refresh(); } catch (error) { notice(error.message, 'error'); }
@@ -47,15 +51,26 @@ export function renderProgress(panel, job) {
   const youtube = job.kind === 'youtube';
   const setup = job.kind === 'setup';
   const exportJob = job.kind === 'export';
-  const steps = setup ? SETUP_STEPS : youtube ? YOUTUBE_STEPS : exportJob ? EXPORT_STEPS : job.guitar_split ? GUITAR_STEPS : SEPARATION_STEPS;
+  const steps = setup ? SETUP_STEPS : youtube ? YOUTUBE_STEPS : exportJob ? EXPORT_STEPS : job.guitar_split ? GUITAR_STEPS : job.split_leaves ? SEPARATION_SPLIT_STEPS : SEPARATION_STEPS;
   const running = ['running', 'cancelling'].includes(job.status);
-  const phase = setup ? job.phase : job.status === 'succeeded' ? 'done' : job.phase === 'download' && !youtube ? 'load' : job.phase;
+  let phase = setup ? job.phase : job.status === 'succeeded' ? 'done' : job.phase === 'download' && !youtube ? 'load' : job.phase;
+  // A split-only job runs the guitar model as its one and only pass, so its phase
+  // belongs to its own "Split guitar" step rather than to a second pass.
+  if (job.guitar_split && phase === 'guitar') phase = 'separate';
+  const splitPass = phase === 'guitar';
   const progress = job.status === 'succeeded' ? 100 : Math.max(0, Math.min(100, job.progress || 0));
+  // The ring counts the current step's own 0-100, so the long guitar pass starts a
+  // fresh gauge instead of creeping through the tail of the stem pass's bar. Jobs that
+  // never report per-step numbers (setup, queued work) fall back to the overall bar.
+  const stepProgress = job.status === 'succeeded' ? 100
+    : Math.max(0, Math.min(100, job.step_progress ?? progress));
   panel.dataset.status = job.status;
-  panel.classList.toggle('busy', running && (setup ? true : youtube ? progress === 0 : phase !== 'separate' && phase !== 'export'));
-  panel.querySelector('.pv-num').textContent = Math.floor(progress);
+  panel.dataset.pass = splitPass ? 'guitar' : 'stems';
+  panel.classList.toggle('busy', running && (setup ? true : youtube ? progress === 0 : !['separate', 'guitar', 'export'].includes(phase)));
+  panel.querySelector('.pv-num').textContent = Math.floor(stepProgress);
+  panel.querySelector('.pv-bar').setAttribute('stroke', `url(#${panel.id}-${splitPass ? 'g2' : 'g'})`);
   panel.querySelector('.pv-bar').style.strokeDasharray = `${CIRCUMFERENCE}`;
-  panel.querySelector('.pv-bar').style.strokeDashoffset = `${CIRCUMFERENCE * (1 - progress / 100)}`;
+  panel.querySelector('.pv-bar').style.strokeDashoffset = `${CIRCUMFERENCE * (1 - stepProgress / 100)}`;
   panel.querySelector('.pv-linebar i').style.width = `${progress}%`;
   let title, sub;
   if (setup) {
@@ -75,9 +90,10 @@ export function renderProgress(panel, job) {
     sub = running ? t('export.phase.workingSub') : job.error || (job.status === 'succeeded' ? t('export.phase.readySub') : '');
   } else {
     const titles = {prepare: job.guitar_split ? t('sep.phase.prepareGuitar') : t('sep.phase.prepareNormal'), load: job.phase === 'download' ? t('sep.phase.downloadModel') : t('sep.phase.loadModel'),
-      download: t('sep.phase.downloadYoutube'), separate: job.guitar_split ? t('sep.phase.separateGuitar') : t('sep.phase.separateNormal'), finalize: youtube ? t('sep.phase.finalizeYoutube') : t('sep.phase.finalizeNormal')};
+      download: t('sep.phase.downloadYoutube'), separate: job.guitar_split ? t('sep.phase.separateGuitar') : t('sep.phase.separateNormal'),
+      guitar: t('sep.phase.splitGuitar'), finalize: youtube ? t('sep.phase.finalizeYoutube') : t('sep.phase.finalizeNormal')};
     const subs = {prepare: t('sep.sub.prepare'), load: job.phase === 'download' ? t('sep.sub.loadDownloading') : t('sep.sub.load'),
-      download: t('sep.sub.download'), separate: t('sep.sub.separate'), finalize: t('sep.sub.finalize')};
+      download: t('sep.sub.download'), separate: t('sep.sub.separate'), guitar: t('sep.sub.splitGuitar'), finalize: t('sep.sub.finalize')};
     const ended = {succeeded: youtube ? t('sep.ended.downloadComplete') : t('sep.ended.separationComplete'), failed: youtube ? t('sep.ended.downloadFailed') : t('sep.ended.separationFailed'), cancelled: t('progress.cancelled')};
     title = job.status === 'cancelling' ? t('progress.stopping') : running ? titles[phase] || t('progress.working') : ended[job.status];
     sub = running ? subs[phase] || '' : job.error || (job.status === 'succeeded' ? t('sep.readySub') : '');
@@ -92,6 +108,9 @@ export function renderProgress(panel, job) {
   steps.forEach(([key, label], index) => {
     const item = el('li', index < current || phase === 'done' ? 'done' : index === current && running ? 'active' : '', t(label));
     if (index === current && !running && job.status !== 'succeeded') item.className = 'failed';
+    // The active chip carries this step's own percentage, so "40%" on the ring always
+    // belongs to the step that is lit below it.
+    if (index === current && running && progress > 0) item.dataset.pct = `${Math.floor(stepProgress)}%`;
     list.append(item);
   });
   panel.querySelector('.pv-log').textContent = (job.logs || []).join('\n');

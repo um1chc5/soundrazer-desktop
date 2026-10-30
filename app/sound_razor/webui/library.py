@@ -26,6 +26,9 @@ from ..setup_env import (FFMPEG_SIZE_MB, RUNTIME_SIZE_MB, SEPARATION_SIZE_MB, YO
                          ffmpeg_ok, runtime_ok, separation_ok, youtube_ok, run_setup)
 
 CUSTOM_STEMS = ("vocals", "guitar", "bass", "drums", "piano", "other")
+# A plan may also name the guitar-split outputs, both as own files and as group
+# members; they are produced mid-run by the split, not by the separation model.
+PLAN_STEMS = (*CUSTOM_STEMS, "lead", "rhythm")
 
 # Staging-directory prefixes left behind by interrupted runs. The startup sweep only
 # removes directories matching these prefixes, never follows symlinks, and never
@@ -44,9 +47,42 @@ def selection_stems(preset, stems=None):
         raise ValueError("Choose vocals/instrumental or custom separation.")
     if not isinstance(stems, list) or not stems:
         raise ValueError("Select at least one instrument.")
-    if any(not isinstance(stem, str) or stem not in CUSTOM_STEMS for stem in stems):
-        raise ValueError("Unknown custom stem.")
+    unknown = [stem for stem in stems
+               if not isinstance(stem, str) or stem not in CUSTOM_STEMS]
+    if unknown:
+        raise ValueError(f"Unknown custom stem: {', '.join(map(str, unknown))}.")
     return list(dict.fromkeys(stems))
+
+
+def validate_group(group):
+    """None keeps the legacy `--stems other,…` folding; a list is an explicit plan."""
+    if group is None:
+        return None
+    if not isinstance(group, list):
+        raise ValueError("Invalid stem plan.")
+    unknown = [name for name in group
+               if not isinstance(name, str) or name not in PLAN_STEMS]
+    if unknown:
+        raise ValueError(f"Unknown stem in the plan: {', '.join(map(str, unknown))}.")
+    return list(dict.fromkeys(group))
+
+
+def plan_stems(preset, stems, group=None):
+    """Own files for a job. An explicit plan may keep none of them, as long as
+    something is folded; the empty list is then deliberate, not a mistake."""
+    if group is None:
+        return selection_stems(preset, stems)
+    if not isinstance(stems, list):
+        raise ValueError("Invalid stem plan.")
+    # `lead`/`rhythm` are legal own files: they arrive from the guitar split.
+    unknown = [stem for stem in stems
+               if not isinstance(stem, str) or stem not in PLAN_STEMS]
+    if unknown:
+        raise ValueError(f"Unknown stem in the plan: {', '.join(map(str, unknown))}.")
+    chosen = list(dict.fromkeys(stems))
+    if not chosen and not group:
+        raise ValueError("Select at least one instrument.")
+    return chosen
 
 
 # tqdm bars from audio-separator, e.g. " 45%|████▌     | 23/51 [00:12<00:15,  1.80it/s]"
@@ -55,9 +91,15 @@ GUITAR_PROGRESS = re.compile(r"^Guitar split (\d{1,3})%")
 # (marker printed by the CLI, phase, overall progress when the phase starts)
 PHASE_MARKERS = (("Preparing audio", "prepare", 2), ("Loading model", "load", 6),
                  ("Downloading ", "download", 6), ("Separating with", "separate", 12),
-                 ("Splitting guitar", "separate", 12), ("Writing stems", "finalize", 96),
+                 ("Splitting guitar", "guitar", 12), ("Writing stems", "finalize", 96),
                  ("Exporting stems", "export", 2), ("Exported ", "finalize", 96))
 SEPARATE_RANGE = (12, 95)
+# A separation that also splits the guitar runs two inference passes inside the one
+# job: Demucs, then the RoFormer lead/rhythm split. The second pass gets its own phase
+# so the UI can label it and colour it separately, and its own slice of the bar so it
+# can never look frozen at the first pass's ceiling.
+DEMUCS_RANGE = (12, 70)
+GUITAR_RANGE = (70, 95)
 YTDLP_PROGRESS = re.compile(r"\[download\]\s+([\d.]+)%(?:.*ETA\s+([\d:]+))?")
 
 
@@ -73,6 +115,70 @@ def clock_seconds(text: str):
 
 
 APP_VERSION = app_version()
+# How many per-job log files to keep on disk. Logs are small text files, but a
+# long-lived install can run thousands of jobs, so keep only the recent ones.
+JOB_LOG_KEEP = 40
+
+
+class JobLog:
+    """A per-job transcript on disk, so a run can be diagnosed after the fact.
+
+    The UI's in-memory log is trimmed to 160 lines, drops the progress lines that
+    drive the bar, and dies with the server process (a cancelled or crashed job
+    leaves nothing behind). This file keeps every raw CLI line plus the command
+    that produced it.
+    """
+
+    def __init__(self, directory: Path, job: dict, command):
+        self.path = None
+        self.handle = None
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+            stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(job.get("started") or time.time()))
+            safe = re.sub(r"[^\w.-]+", "-", f"{stamp}-{job['kind']}-{job['id']}").strip("-")
+            self.path = directory / f"{safe}.log"
+            self.handle = self.path.open("w", encoding="utf-8", errors="replace", buffering=1)
+            self.write(f"# job      {job['id']} ({job['kind']})")
+            if job.get("project"):
+                self.write(f"# project  {job['project']}")
+            self.write(f"# started  {stamp}  app {APP_VERSION}")
+            self.write("# command  " + " ".join(str(part) for part in command))
+            self.write("")
+            job["log"] = str(self.path)
+        except OSError:
+            self.handle = None
+
+    def write(self, line: str):
+        if self.handle is None:
+            return
+        try:
+            stamp = time.strftime("%H:%M:%S")
+            self.handle.write(f"{stamp} {line}\n")
+        except OSError:
+            self.handle = None
+
+    def close(self, status: str, error=None):
+        if self.handle is None:
+            return
+        try:
+            self.write("")
+            self.write(f"# status   {status}" + (f": {error}" if error else ""))
+            self.handle.close()
+        except OSError:
+            pass
+        finally:
+            self.handle = None
+
+
+def prune_job_logs(directory: Path, keep: int = JOB_LOG_KEEP):
+    """Delete all but the newest `keep` job logs. Never raises."""
+    try:
+        logs = sorted(directory.glob("*.log"), key=lambda path: path.stat().st_mtime, reverse=True)
+        for stale in logs[keep:]:
+            stale.unlink(missing_ok=True)
+    except OSError:
+        pass
+
 
 
 def public_job(job: dict) -> dict:
@@ -103,6 +209,9 @@ class Library:
         self.active_jobs = {}        # job_id -> job record for active jobs
         self.processes = {}          # job_id -> subprocess.Popen
         self.job_logs = {}           # job_id -> deque(maxlen=160)
+        # Per-job transcripts on disk (see JobLog). Kept next to the config file so
+        # dev runs and installs both leave a trail; overridable for tests.
+        self.log_dir = Path(os.environ.get("SOUND_RAZOR_LOG_DIR") or self.config.parent / "logs")
         self.finished_jobs = deque(maxlen=20)  # recent finished records, for UI notices
         self._drainer = None         # coordinator thread that starts workers up to cap
         self._job_done = threading.Event()  # set when any active job finishes
@@ -264,27 +373,65 @@ class Library:
             if line.startswith(marker):
                 job["phase"] = phase
                 job["progress"] = max(job["progress"], floor)
-                if phase == "separate":
+                # Every step owns its own 0-100: the dialog's ring restarts for the
+                # guitar pass instead of counting one global bar, so a long second
+                # pass is visibly its own stage rather than a stalled first one.
+                # Only stages that report real sub-progress reset the ring; prepare/
+                # load/save keep the finished value so it never jumps back to 0.
+                if phase in {"separate", "guitar", "download", "export"}:
+                    job["step_progress"] = 0
+                if phase == "guitar":
+                    # A split-only job has no Demucs pass in front of it, so its bar
+                    # starts from the same low floor instead of jumping to 70.
+                    job["progress"] = max(job["progress"], self._guitar_range(job)[0])
+                if phase in {"separate", "guitar"}:
                     job["phase_started"] = time.time()
                 if phase in {"finalize", "download"}:
                     job["eta"] = None
                 return False
         bar = TQDM.search(line)
-        step = bar or GUITAR_PROGRESS.match(line)
+        guitar = GUITAR_PROGRESS.match(line)
+        step = bar or guitar
         if not step:
             return False
-        if job["phase"] == "separate":
-            low, high = SEPARATE_RANGE
+        if job["phase"] in {"separate", "guitar"}:
+            low, high = self._guitar_range(job) if job["phase"] == "guitar" and guitar \
+                else self._separate_slice(job, bool(guitar))
+            # Time the ETA extrapolation from the start of *this* pass. Measuring from
+            # the start of the phase made the guitar pass inherit the whole Demucs run:
+            # at 15% of the split it reported that Demucs' minutes had to be repeated
+            # for the remaining 85%, so TIME LEFT swelled to ~12 minutes.
+            sample = "guitar" if guitar else "demucs"
+            if job.get("sample") != sample:
+                job["sample"] = sample
+                job["sample_started"] = time.time()
             percent = min(100, int(step.group(1)))
+            job["step_progress"] = max(job.get("step_progress") or 0, percent)
             job["progress"] = max(job["progress"], low + (high - low) * percent / 100)
             remaining = clock_seconds(bar.group(3)) if bar else None
             if remaining is None and percent:
-                spent = time.time() - job.get("phase_started", job["started"])
+                spent = time.time() - job.get("sample_started", job["started"])
                 remaining = spent * (100 - percent) / percent
             if remaining is not None:
                 job["eta"] = remaining + 3  # writing stems afterwards takes a few seconds
                 job["eta_at"] = time.time()
         return True
+
+    @staticmethod
+    def _guitar_range(job: dict):
+        """The slice of the bar the lead/rhythm split owns. It only has a slice of its
+        own when a Demucs pass runs first; a split-only job owns the whole bar."""
+        if job.get("split_leaves"):
+            return GUITAR_RANGE
+        return SEPARATE_RANGE
+
+    @staticmethod
+    def _separate_slice(job: dict, guitar: bool):
+        """Which part of the bar the Demucs pass owns. A separation that also splits
+        the guitar shares the phase with it; everything else uses the whole range."""
+        if job.get("split_leaves"):
+            return DEMUCS_RANGE
+        return SEPARATE_RANGE
 
     # ------------------------------------------------------------------ enqueue
 
@@ -363,6 +510,7 @@ class Library:
         job["finished"] = time.time()
         self.processes.pop(job["id"], None)
         self.finished_jobs.append(job)
+        prune_job_logs(self.log_dir)
         # Point the UI's single-job shim at the finished job unless another is still running,
         # so its success/failure notice still surfaces.
         others = [other for other in self._active_jobs() if other is not job]
@@ -385,10 +533,10 @@ class Library:
         try:
             if kind == "separate":
                 self._separate(job, job["_project"], job["_original"], job["_stems"],
-                               job["_guitar_split"], job["_trim"])
+                               job.get("_group"), job.get("_split_leaves", False), job["_trim"])
             elif kind == "split-guitar":
                 self._separate(job, job["_project"], job["_original"], job["_stems"],
-                               True, job["_trim"])
+                               None, False, job["_trim"])
             elif kind == "youtube":
                 self._youtube(job, job["_root"], job["_url"], job["_fields"])
             elif kind == "setup":
@@ -408,38 +556,57 @@ class Library:
 
     # ---------------------------------------------------------------- start
 
-    def start(self, identifier: str, preset: str, stems=None, *, guitar_split=False, trim=None):
+    def start(self, identifier: str, preset: str, stems=None, *, group=None,
+              split_leaves=False, guitar_split=False, trim=None):
         with self.lock:
-            chosen = ['lead', 'rhythm'] if guitar_split else selection_stems(preset, stems)
+            chosen_group = validate_group(group)
+            chosen = ['lead', 'rhythm'] if guitar_split else plan_stems(preset, stems, chosen_group)
             project = project_path(self.require_root(), identifier)
             info = describe_project(project)
             if not guitar_split and not info["original"]:
                 raise ValueError("This project needs an unambiguous original audio file.")
             if (project / "stems").is_symlink():
                 raise ValueError("The stems folder must not be a symlink.")
-            if guitar_split:
-                guitar = stem_file(project/'stems', 'guitar')
-                if guitar not in {item['file'] for item in info['stems']}:
-                    raise ValueError('Separate the guitar track first.')
-                if any(p.is_symlink() or not p.is_file() for p in (project/'stems').iterdir()):
-                    raise ValueError('The stems folder must contain regular files only.')
-                if any((project/'stems'/f'{name}{ext}').exists()
-                       for name in ('lead', 'rhythm') for ext in ('.flac', '.wav')):
-                    raise ValueError('This project already contains lead or rhythm tracks.')
-                trim_source = project / 'stems' / guitar
-                saved_trim = parse_trim(trim, probe_duration(trim_source), 2.0) if trim is not None else None
-            else:
-                saved_trim = parse_trim(trim, probe_duration(project / info["original"]), 1.0) if trim is not None else None
-            self.job_logs.pop(identifier, None)  # no-op safety; logs are keyed by job id
-            job = {"id": uuid.uuid4().hex, "kind": "split-guitar" if guitar_split else "separate",
-                   "project": identifier, "status": "queued",
-                   "started": time.time(), "finished": None, "error": None,
-                   "preset": preset, "stems": chosen, "guitar_split": guitar_split,
-                   "trim": {"start": saved_trim[0], "end": saved_trim[1]} if saved_trim else None,
-                   "phase": "prepare", "progress": 0, "eta": None,
-                   "_project": project, "_original": info["original"],
-                   "_stems": chosen, "_guitar_split": guitar_split, "_trim": saved_trim}
-            return self._enqueue(job)
+            if split_leaves and guitar_split:
+                raise ValueError("A split-only job cannot also split the guitar.")
+            return self._enqueue_separation(identifier, preset, chosen, chosen_group,
+                                            split_leaves, guitar_split, info, project, trim)
+
+    def _start_trim(self, project, info, guitar_split, trim):
+        if trim is None:
+            return None
+        if guitar_split:
+            guitar = stem_file(project / 'stems', 'guitar')
+            return parse_trim(trim, probe_duration(project / 'stems' / guitar), 2.0)
+        return parse_trim(trim, probe_duration(project / info["original"]), 1.0)
+
+    def _validate_split_job(self, project, info):
+        guitar = stem_file(project / 'stems', 'guitar')
+        if guitar not in {item['file'] for item in info['stems']}:
+            raise ValueError('Separate the guitar track first.')
+        if any(p.is_symlink() or not p.is_file() for p in (project / 'stems').iterdir()):
+            raise ValueError('The stems folder must contain regular files only.')
+        if any((project / 'stems' / f'{name}{ext}').exists()
+               for name in ('lead', 'rhythm') for ext in ('.flac', '.wav')):
+            raise ValueError('This project already contains lead or rhythm tracks.')
+        return project / 'stems' / guitar
+
+    def _enqueue_separation(self, identifier, preset, chosen, chosen_group, split_leaves,
+                            guitar_split, info, project, trim):
+        if guitar_split:
+            self._validate_split_job(project, info)
+        saved_trim = self._start_trim(project, info, guitar_split, trim)
+        job = {"id": uuid.uuid4().hex, "kind": "split-guitar" if guitar_split else "separate",
+               "project": identifier, "status": "queued",
+               "started": time.time(), "finished": None, "error": None,
+               "preset": preset, "stems": chosen, "group": chosen_group or [],
+               "guitar_split": guitar_split, "split_leaves": bool(split_leaves),
+               "trim": {"start": saved_trim[0], "end": saved_trim[1]} if saved_trim else None,
+               "phase": "prepare", "progress": 0, "step_progress": 0, "eta": None,
+               "_project": project, "_original": info["original"],
+               "_stems": chosen, "_group": chosen_group,
+               "_split_leaves": bool(split_leaves), "_trim": saved_trim}
+        return self._enqueue(job)
 
     def import_youtube(self, data):
         url = youtube_url(data.get('url'))
@@ -481,7 +648,7 @@ class Library:
                 raise ValueError("Nothing to set up.")
             job = {"id": uuid.uuid4().hex, "kind": "setup", "project": None,
                    "status": "queued", "started": time.time(), "finished": None, "error": None,
-                   "phase": "prepare", "progress": 0, "eta": None,
+                   "phase": "prepare", "progress": 0, "step_progress": 0, "eta": None,
                    "stages": stages, "stage": None,
                    "_stages": stages}
             return self._enqueue(job)
@@ -505,23 +672,31 @@ class Library:
             with tempfile.TemporaryDirectory(prefix='.youtube-', dir=root) as temporary:
                 work = Path(temporary)
                 with self.lock:
-                    process = self._launch(job, youtube_command(url, work), stdout=subprocess.PIPE,
+                    command = youtube_command(url, work)
+                    process = self._launch(job, command, stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace',
                         env=dict(os.environ, PYTHONUNBUFFERED='1', PYTHONIOENCODING='utf-8'), start_new_session=True)
                     if process is None:
                         return
-                for line in process.stdout:
-                    line = line.strip()
-                    with self.lock:
-                        download = YTDLP_PROGRESS.search(line)
-                        if download:
-                            job['progress'] = max(job['progress'], float(download.group(1)))
-                            job['eta'] = clock_seconds(download.group(2)) if download.group(2) else None
-                            job['eta_at'] = time.time()
-                        elif line:
-                            self._job_logs(job_id).append(line[-2000:])
-                code = process.wait()
-                process.stdout.close()
+                transcript = JobLog(self.log_dir, job, command)
+                try:
+                    for line in process.stdout:
+                        line = line.strip()
+                        transcript.write(line)
+                        with self.lock:
+                            download = YTDLP_PROGRESS.search(line)
+                            if download:
+                                job['progress'] = max(job['progress'], float(download.group(1)))
+                                job['step_progress'] = max(job.get('step_progress') or 0,
+                                                            float(download.group(1)))
+                                job['eta'] = clock_seconds(download.group(2)) if download.group(2) else None
+                                job['eta_at'] = time.time()
+                            elif line:
+                                self._job_logs(job_id).append(line[-2000:])
+                    code = process.wait()
+                finally:
+                    transcript.close(job['status'], job.get('error'))
+                    process.stdout.close()
                 with self.lock:
                     if job['status'] == 'cancelling':
                         return
@@ -545,21 +720,14 @@ class Library:
             with self.lock:
                 self._finish(job)
 
-    def _separate(self, job, project: Path, original: str, stems: list[str], guitar_split=False, trim=None):
+    def _separate(self, job, project: Path, original: str, stems: list[str],
+                  group=None, split_leaves=False, trim=None):
         job_id = job["id"]
         try:
             with tempfile.TemporaryDirectory(prefix=".separation-", dir=project) as temporary:
                 stage = Path(temporary) / "stems"
-                range_args = ["--start", f"{trim[0]:.3f}", "--end", f"{trim[1]:.3f}"] if trim else []
-                if guitar_split:
-                    shutil.copytree(project/'stems', stage)
-                    command = [sys.executable, '-m', 'sound_razor', 'split-guitar',
-                               '--file', str(stage/stem_file(stage, 'guitar')), '--output', str(stage),
-                               '--cache', str(self.cache), *range_args]
-                else:
-                    command = [sys.executable, "-m", "sound_razor", "separate", "--file", str(project / original),
-                               "--output", str(stage), "--cache", str(self.cache), "--stems", *stems,
-                               *range_args]
+                command = self._separation_command(job, project, original, stage,
+                                                   stems, group, split_leaves, trim)
                 # UTF-8 both ways, so non-ASCII song titles and paths survive the pipe on Windows.
                 env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8", ORT_DISABLE_TELEMETRY="1")
                 with self.lock:
@@ -568,22 +736,24 @@ class Library:
                     if process is None:
                         return
                 job_logs = self._job_logs(job_id)
-                for line in process.stdout:
-                    line = line.strip()
-                    with self.lock:
-                        if line and not self._track_progress(job, line):
-                            job_logs.append(line[-2000:])
-                code = process.wait()
-                process.stdout.close()
+                transcript = JobLog(self.log_dir, job, command)
+                try:
+                    for line in process.stdout:
+                        line = line.strip()
+                        transcript.write(line)
+                        with self.lock:
+                            if line and not self._track_progress(job, line):
+                                job_logs.append(line[-2000:])
+                    code = process.wait()
+                finally:
+                    transcript.close(job["status"], job.get("error"))
+                    process.stdout.close()
                 with self.lock:
                     if job["status"] == "cancelling":
                         return
                 if code != 0:
                     raise RuntimeError(f"Separation CLI exited with code {code}. See the process log.")
-                for stem in stems:
-                    path = stage / f"{stem}.flac"
-                    if not path.is_file() or path.stat().st_size <= 44:
-                        raise RuntimeError(f"CLI did not produce {stem}.flac.")
+                self._expect_outputs(stage, stems, group)
                 # Publish only a successful run; preserve the old stems on failure.
                 with self.lock:
                     if job["status"] == "cancelling":
@@ -598,7 +768,7 @@ class Library:
                         if backup.exists():
                             backup.rename(destination)
                         raise
-                    job.update(status="succeeded", progress=100, phase="done", eta=0)
+                    job.update(status="succeeded", progress=100, step_progress=100, phase="done", eta=0)
         except Exception as error:
             with self.lock:
                 if job["status"] != "cancelling":
@@ -606,6 +776,36 @@ class Library:
         finally:
             with self.lock:
                 self._finish(job)
+
+    def _separation_command(self, job, project: Path, original: str, stage: Path,
+                            stems: list[str], group, split_leaves: bool, trim):
+        range_args = ["--start", f"{trim[0]:.3f}", "--end", f"{trim[1]:.3f}"] if trim else []
+        if job["kind"] == "split-guitar":
+            shutil.copytree(project / 'stems', stage)
+            return [sys.executable, '-m', 'sound_razor', 'split-guitar',
+                    '--file', str(stage / stem_file(stage, 'guitar')), '--output', str(stage),
+                    '--cache', str(self.cache), *range_args]
+        command = [sys.executable, "-m", "sound_razor", "separate", "--file", str(project / original),
+                   "--output", str(stage), "--cache", str(self.cache)]
+        if group is not None:
+            # An explicit plan may legitimately keep no stem of its own, so send
+            # --stems unconditionally (nargs="*") to mean "own files = these".
+            command += ["--stems", *stems]
+            if group:
+                command += ["--group", *group]
+        elif stems:
+            command += ["--stems", *stems]
+        if split_leaves:
+            command += ["--split-guitar"]
+        return command + range_args
+
+    def _expect_outputs(self, stage: Path, stems: list[str], group):
+        """A merged stem must NOT reach the stage: only own files and other.flac do."""
+        names = [*stems, *(['other'] if group else [])]
+        for name in dict.fromkeys(names):
+            path = stage / f"{name}.flac"
+            if not path.is_file() or path.stat().st_size <= 44:
+                raise RuntimeError(f"CLI did not produce {name}.flac.")
 
     def start_export(self, identifier: str, formats, stems, *, prevent_clipping=True):
         with self.lock:
@@ -641,7 +841,7 @@ class Library:
                    "status": "queued", "started": time.time(), "finished": None, "error": None,
                    "formats": chosen_formats, "stems": chosen_stems,
                    "prevent_clipping": bool(prevent_clipping),
-                   "phase": "prepare", "progress": 0, "eta": None,
+                   "phase": "prepare", "progress": 0, "step_progress": 0, "eta": None,
                    "_project": project, "_formats": chosen_formats, "_stems": chosen_stems,
                    "_prevent_clipping": bool(prevent_clipping)}
             return self._enqueue(job)
@@ -656,6 +856,8 @@ class Library:
                     fraction = completed / total if total else 0
                     job["phase"] = "finalize" if completed >= total else "export"
                     job["progress"] = max(2, min(96, 2 + fraction * 93))
+                    # The ring is per step: this report is the export step's own 0-100.
+                    job["step_progress"] = max(job.get("step_progress") or 0, round(fraction * 100))
                     if fraction > 0.02:
                         job["eta"] = (time.time() - job["started"]) / fraction + 1
                         job["eta_at"] = time.time()
@@ -672,7 +874,7 @@ class Library:
             export_stems(project, stems, formats, prevent_clipping, report, set_process)
             with self.lock:
                 if job["status"] != "cancelling":
-                    job.update(status="succeeded", progress=100, phase="done", eta=0)
+                    job.update(status="succeeded", progress=100, step_progress=100, phase="done", eta=0)
         except Exception as error:
             with self.lock:
                 if job["status"] != "cancelling":

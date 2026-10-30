@@ -1,7 +1,7 @@
 import {$, el, activeProject, jobPending, projectJob, findJob, queueBusy, api, notice, projectUrl, stemLabel} from '../core.js';
 import {store, nav} from '../store.js';
 import {renderProgress} from '../progress.js';
-import {pickerValue, pickerValid} from '../picker.js';
+import {pickerValue, pickerValid, loadPlan} from '../picker.js';
 import {loadAudio, player} from '../audio.js';
 import {coverImage} from '../covers.js';
 import {ORIGINAL_FILE, EXPORT_FORMATS} from '../constants.js';
@@ -15,6 +15,21 @@ function storedTrim(project, duration) {
   if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) return null;
   const clamped = {start: Math.min(start, duration), end: Math.min(end, duration)};
   return clamped.end > clamped.start ? clamped : null;
+}
+
+/** The plan that produced this song's stems, or null when it was a quick run.
+ *  Only a plan that actually folded stems is worth remembering: everything else
+ *  is exactly what the quick grid already expresses. */
+function storedPlan(project) {
+  const separation = project.separation || {};
+  const group = Array.isArray(separation.group) ? separation.group : [];
+  if (!group.length) return null;
+  const stems = Array.isArray(separation.stems) ? separation.stems : [];
+  return {
+    stems: stems.filter(name => !group.includes(name)),
+    group,
+    split: Boolean(separation.lead_rhythm_split),
+  };
 }
 function renderSongChip() {
   const chip = $('song-trim-chip');
@@ -148,6 +163,12 @@ export function renderSong() {
   $('separation-description').textContent = hasStems
     ? t('song.rerunReplaces')
     : t('song.notSeparatedYet');
+  // Seed the picker from this song's saved plan once per song, so the polling
+  // refresh never discards a plan the user is still editing.
+  if (store.songPlanFor !== store.selected) {
+    store.songPlanFor = store.selected;
+    loadPlan($('song-stems'), storedPlan(project));
+  }
   $('separate').disabled = !project.original || busyHere || !pickerValid($('song-stems'));
   $('separate').textContent = queueBusy() && !busyHere ? t('start.addToQueue') : hasStems ? t('song.separateAgain') : t('song.separateStemsButton');
   $('delete-open').disabled = busyHere;

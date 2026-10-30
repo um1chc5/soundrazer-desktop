@@ -177,6 +177,8 @@ def make_server(library: Library, port: int = 8765):
                         return None
                     if method == "POST" and len(parts) == 4 and parts[3] == "separate":
                         return library.start(parts[2], data.get("preset", "vocals"), data.get("stems"),
+                                             group=data.get("group"),
+                                             split_leaves=bool(data.get("split")),
                                              trim=data.get("trim"))
                     if method == "POST" and len(parts) == 4 and parts[3] == "split-guitar":
                         return library.start(parts[2], 'guitar', guitar_split=True, trim=data.get("trim"))

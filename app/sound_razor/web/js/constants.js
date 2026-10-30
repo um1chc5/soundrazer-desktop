@@ -4,10 +4,19 @@ export const ORIGINAL_COLOR = '#9aa3b2';
 // literal text, so labels stay in sync when the language is switched at runtime.
 export const STEMS = [['vocals', 'stem.vocals', '#ff8a3d'], ['drums', 'stem.drums', '#5ec8ff'], ['bass', 'stem.bass', '#b48cff'],
   ['guitar', 'stem.guitar', '#4fe0a8'], ['piano', 'stem.piano', '#ffd166'], ['other', 'stem.other', '#ff6f91']];
-export const STEM_LABEL_KEYS = {vocals: 'stem.vocals', drums: 'stem.drums', bass: 'stem.bass', guitar: 'stem.guitar', piano: 'stem.piano', other: 'stem.other', instrumental: 'stem.instrumental'};
+export const STEM_LABEL_KEYS = {vocals: 'stem.vocals', drums: 'stem.drums', bass: 'stem.bass', guitar: 'stem.guitar', piano: 'stem.piano', other: 'stem.other', instrumental: 'stem.instrumental', lead: 'stem.lead', rhythm: 'stem.rhythm'};
+// Split outputs: not model stems, so they live outside STEMS (the quick grid and
+// the request payload are built from STEMS alone).
+export const LEAVES = [['lead', 'stem.lead', '#4fe0a8'], ['rhythm', 'stem.rhythm', '#7ef0c6']];
+export const PLAN_META = Object.fromEntries(
+  [...STEMS, ...LEAVES].map(([id, key, color]) => [id, {key, color}]));
 export const DEFAULT_STEMS = ['vocals', 'drums', 'bass', 'guitar'];
 export const AUDIO_EXTENSIONS = ['.wav', '.flac', '.mp3', '.opus', '.ogg', '.m4a', '.aac', '.aiff', '.aif'];
 export const SEPARATION_STEPS = [['prepare', 'step.separation.prepare'], ['load', 'step.separation.load'], ['separate', 'step.separation.separate'], ['finalize', 'step.separation.finalize']];
+// A separation that also splits the guitar runs a second, much slower model after the
+// stem model. Show it as its own step instead of hiding it inside "Separate stems",
+// or the dialog sits on one step for minutes and reads as stuck.
+export const SEPARATION_SPLIT_STEPS = [['prepare', 'step.separation.prepare'], ['load', 'step.separation.load'], ['separate', 'step.separation.separate'], ['guitar', 'step.separation.guitar'], ['finalize', 'step.separation.finalize']];
 export const GUITAR_STEPS = [['prepare', 'step.guitar.prepare'], ['separate', 'step.guitar.separate'], ['finalize', 'step.guitar.finalize']];
 export const YOUTUBE_STEPS = [['download', 'step.youtube.download'], ['finalize', 'step.youtube.finalize']];
 export const EXPORT_STEPS = [['prepare', 'step.export.prepare'], ['export', 'step.export.export'], ['finalize', 'step.export.finalize']];
